@@ -1,0 +1,57 @@
+<View>
+  <!-- 待标注文本（英文键 $text） -->
+  <Text name="text" value="$text" />
+
+  <!-- 主意图：必选·单选 -->
+  <Header value="请选择【主意图】（必选·单选）" />
+  <Choices name="primary" toName="text" choice="single" required="true" showInLine="true">
+    <Choice value="健康咨询">健康咨询</Choice>
+    <Choice value="药品服务">药品服务</Choice>
+    <Choice value="报告解读">报告解读</Choice>
+    <Choice value="就医转诊">就医转诊</Choice>
+    <Choice value="紧急求助">紧急求助</Choice>
+    <Choice value="系统操作">系统操作</Choice>
+    <Choice value="情感支持">情感支持</Choice>
+    <Choice value="家庭管理">家庭管理</Choice>
+    <Choice value="环境健康">环境健康</Choice>
+    <Choice value="闲聊其他">闲聊其他</Choice>
+  </Choices>
+
+  <!-- 次意图：可多选·可留空 -->
+  <Header value="可选：请选择【次意图】（可多选·可留空）" />
+  <Choices name="secondary" toName="text" choice="multiple" showInLine="true">
+    <Choice value="健康咨询">健康咨询</Choice>
+    <Choice value="药品服务">药品服务</Choice>
+    <Choice value="报告解读">报告解读</Choice>
+    <Choice value="就医转诊">就医转诊</Choice>
+    <Choice value="紧急求助">紧急求助</Choice>
+    <Choice value="系统操作">系统操作</Choice>
+    <Choice value="情感支持">情感支持</Choice>
+    <Choice value="家庭管理">家庭管理</Choice>
+    <Choice value="环境健康">环境健康</Choice>
+    <Choice value="闲聊其他">闲聊其他</Choice>
+  </Choices>
+
+  <!-- 同级意图：可多选·可留空 -->
+  <Header value="可选：请选择【同级意图】（可多选·可留空）" />
+  <Choices name="same_level" toName="text" choice="multiple" showInLine="true">
+    <Choice value="健康咨询">健康咨询</Choice>
+    <Choice value="药品服务">药品服务</Choice>
+    <Choice value="报告解读">报告解读</Choice>
+    <Choice value="就医转诊">就医转诊</Choice>
+    <Choice value="紧急求助">紧急求助</Choice>
+    <Choice value="系统操作">系统操作</Choice>
+    <Choice value="情感支持">情感支持</Choice>
+    <Choice value="家庭管理">家庭管理</Choice>
+    <Choice value="环境健康">环境健康</Choice>
+    <Choice value="闲聊其他">闲聊其他</Choice>
+  </Choices>
+
+  <!-- 预标注信息（仅展示，不参与 toName 引用） -->
+  <Header value="—— 预标注（仅参考） ——" />
+  <Text name="weak1" value="弱主意图：$weak_primary" />
+  <Text name="weak2" value="弱次意图：$weak_secondary" />
+  <Text name="weak3" value="弱同级意图：$weak_same_level" />
+  <Text name="weak4" value="置信度：$weak_confidence" />
+  <Text name="weak5" value="理由：$weak_reason" />
+</View>
