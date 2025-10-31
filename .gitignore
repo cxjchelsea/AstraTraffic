@@ -29,7 +29,7 @@ data/models/
 data/storage/
 !data/models/.keep
 !data/storage/.keep
-
+intent/model_packing
 # ==========================
 # 📚 知识库原始数据（可选）
 # 若知识库大或私密，可取消注释以下两行
