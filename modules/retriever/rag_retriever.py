@@ -67,8 +67,8 @@ from settings import (
 )
 
 
-MAX_CHARS_PER_CHUNK = 500                    # 分块目标长度
-CHUNK_OVERLAP       = 100                    # 分块重叠
+MAX_CHARS_PER_CHUNK = 800                    # 分块目标长度
+CHUNK_OVERLAP       = 120                    # 分块重叠
 TOP_K               = 6                      # 初检召回
 TOP_K_FINAL         = 4                      # 最终返回条数
 HYBRID_WEIGHT       = 0.35                   # 稠密/稀疏融合权重（越大越偏 BM25）
@@ -92,16 +92,26 @@ def storage_paths(kb_name: str):
     }
 
 
-# ---- 意图 → 库名路由（与你实际目录保持一致：health / report） ----
-INTENT_TO_KB: Dict[str, Optional[str]] = {
-    "健康咨询": "health",
-    "报告解读": "report",
-    "药品服务": None,
-    "环境健康": None,
-    "就医转诊": None,
-    "紧急求助": None,
-    "情感支持": None,
-    "闲聊其他": None,
+# ---- 意图 → 库名路由（与你实际目录保持一致） ----
+# 暴露默认的意图=>知识库映射（上层可覆盖）
+INTENT_TO_KB = {
+    # 静态知识，走 KB
+    "交通法规": "law",
+    "处罚规则": "law",
+    "限行政策": "law",
+    "信号配时": "handbook",
+    "诱导策略": "handbook",
+    "公交规则": "transit",
+    "停车政策": "parking",
+    "充电规范": "ev",
+    "车路协同": "iov",
+
+    # 类“实时”的意图，现阶段无API，仅给通用说明或走 handbook/law 兜底
+    "路况查询": "handbook",     # 先用静态指导兜底
+    "线路规划": "handbook",
+    "公交到站": "transit",
+    "停车空位": "parking",
+    "天气影响": "handbook",
 }
 
 

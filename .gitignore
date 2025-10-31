@@ -51,7 +51,8 @@ outputs/
 checkpoints/
 runs/
 artifacts/
-
+**/checkpoint-*/
+**/checkpoints*/
 # ==========================
 # 🧪 临时脚本 / 数据导出
 # ==========================

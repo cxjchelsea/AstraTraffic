@@ -1,63 +1,77 @@
 # process/settings.py
 # -*- coding: utf-8 -*-
 """
-全局配置中心：
-- 自动定位项目根（包含 data/ 与 process/ 的目录）
+全局配置中心
+- 自动定位项目根（包含 data/ 且包含 process/ 或 modules/）
 - 加载项目根 .env（不存在也不报错）
-- 提供默认值、类型转换与路径拼装
-- 所有模块统一 import 本文件的变量
+- 统一做路径归一化为绝对路径
 """
+from __future__ import annotations
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# ---------- 1) 自动定位项目根 ----------
-def _find_project_root() -> Path:
-    here = Path(__file__).resolve()
-    # 逐级向上最多找 5 层，找到同时包含 data/ 与 process/ 的目录就认为是项目根
-    for p in [here.parent, here.parent.parent, here.parent.parent.parent, here.parent.parent.parent.parent, here.parents[4] if len(here.parents) > 4 else here.parent]:
-        try:
-            if (p / "data").exists() and (p / "process").exists():
-                return p
-        except Exception:
-            pass
-    # 兜底：返回 process 的父级
-    return here.parent
-
-# 允许外部强制指定
-_ENV_PROJECT_ROOT = os.getenv("PROJECT_ROOT", "")
-PROJECT_ROOT: Path = Path(_ENV_PROJECT_ROOT) if _ENV_PROJECT_ROOT else _find_project_root()
-
-# ---------- 2) 读取 .env ----------
-# 显式加载项目根目录的 .env（若不存在，不报错）
-load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
-
-# ---------- 3) 类型转换工具 ----------
-def _as_bool(v: str, default: bool = False) -> bool:
+# ---------- 1) 工具：类型与路径解析 ----------
+def _as_bool(v: str | None, default: bool = False) -> bool:
     if v is None:
         return default
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
-def _as_int(v: str, default: int) -> int:
+def _as_int(v: str | None, default: int) -> int:
     try:
-        return int(v)
+        return int(v) if v is not None else default
     except Exception:
         return default
 
-def _as_float(v: str, default: float) -> float:
+def _as_float(v: str | None, default: float) -> float:
     try:
-        return float(v)
+        return float(v) if v is not None else default
     except Exception:
         return default
 
-# ---------- 4) 目录结构（可被 .env 覆盖） ----------
-DATA_DIR: Path      = Path(os.getenv("DATA_DIR",      PROJECT_ROOT / "data"))
-MODELS_DIR: Path    = Path(os.getenv("MODELS_DIR",    DATA_DIR / "models"))
-STORAGE_DIR: Path   = Path(os.getenv("STORAGE_DIR",   DATA_DIR / "storage"))
-KNOWLEDGE_DIR: Path = Path(os.getenv("KNOWLEDGE_DIR", DATA_DIR / "knowledge"))
+def _abs_from_root(p: str | os.PathLike | None, project_root: Path, default: Path) -> Path:
+    """环境变量中的路径若为相对路径，则基于 project_root 转为绝对路径；若为空则用 default。"""
+    if p is None or str(p).strip() == "":
+        return default.resolve()
+    pth = Path(p)
+    return (pth if pth.is_absolute() else (project_root / pth)).resolve()
 
-# 必要目录幂等创建
-for p in [DATA_DIR, MODELS_DIR, STORAGE_DIR, KNOWLEDGE_DIR]:
+# ---------- 2) 自动定位项目根 ----------
+def _find_project_root() -> Path:
+    here = Path(__file__).resolve()
+    # 逐级向上查找：满足 data/ 存在 且 (process/ 或 modules/) 存在 即视为项目根
+    for p in [here.parent, *here.parents]:
+        try:
+            has_data = (p / "data").exists()
+            has_process = (p / "process").exists()
+            has_modules = (p / "modules").exists()
+            if has_data and (has_process or has_modules):
+                return p
+        except Exception:
+            pass
+    # 兜底：返回 settings.py 的父级
+    return here.parent
+
+# 允许外部强制指定（绝对或相对路径都可以）
+_env_root = os.getenv("PROJECT_ROOT", "")
+if _env_root:
+    _project_root_candidate = Path(_env_root)
+    PROJECT_ROOT: Path = (_project_root_candidate if _project_root_candidate.is_absolute()
+                          else (_find_project_root() / _project_root_candidate)).resolve()
+else:
+    PROJECT_ROOT: Path = _find_project_root().resolve()
+
+# ---------- 3) 读取 .env ----------
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
+
+# ---------- 4) 目录结构（统一归一化） ----------
+DATA_DIR: Path      = _abs_from_root(os.getenv("DATA_DIR"),      PROJECT_ROOT, PROJECT_ROOT / "data")
+MODELS_DIR: Path    = _abs_from_root(os.getenv("MODELS_DIR"),    PROJECT_ROOT, DATA_DIR / "models")
+STORAGE_DIR: Path   = _abs_from_root(os.getenv("STORAGE_DIR"),   PROJECT_ROOT, DATA_DIR / "storage")
+KNOWLEDGE_DIR: Path = _abs_from_root(os.getenv("KNOWLEDGE_DIR"), PROJECT_ROOT, DATA_DIR / "knowledge")
+
+# 必要目录幂等创建（不会影响已有目录）
+for p in (DATA_DIR, MODELS_DIR, STORAGE_DIR, KNOWLEDGE_DIR):
     try:
         p.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -68,25 +82,23 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
 RERANKER_MODEL:  str = os.getenv("RERANKER_MODEL",  "BAAI/bge-reranker-base")
 
 # ---------- 6) 意图分类器 ----------
-INTENT_BASE_MODEL_PATH: str = os.getenv("INTENT_BASE_MODEL_PATH", str(MODELS_DIR / "bert-base-chinese"))
-INTENT_ADAPTER_DIR:     str = os.getenv("INTENT_ADAPTER_DIR",     str(MODELS_DIR / "ds_single"))
-LABEL_MAP_PATH:         str = os.getenv("LABEL_MAP_PATH",         str(PROJECT_ROOT / "label_map_intent.json"))
+INTENT_BASE_MODEL_PATH: str = os.getenv("INTENT_BASE_MODEL_PATH", str((MODELS_DIR / "bert-base-chinese").resolve()))
+INTENT_ADAPTER_DIR:     str = os.getenv("INTENT_ADAPTER_DIR",     str((MODELS_DIR / "ds_single").resolve()))
+LABEL_MAP_PATH:         str = os.getenv("LABEL_MAP_PATH",         str((PROJECT_ROOT / "label_map_intent.json").resolve()))
 
 # ---------- 7) LLM 配置 ----------
-# 模式：openai | ollama | http
-LLM_MODE:       str = os.getenv("LLM_MODE", "ollama").lower()
-RAG_LLM_MODEL:  str = os.getenv("RAG_LLM_MODEL", "qwen2.5:14b")
-
-# OpenAI 兼容
-OPENAI_API_KEY:  str = os.getenv("OPENAI_API_KEY", "")
-OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "")
-
-# 本地/HTTP
-LLM_API_BASE_URL: str   = os.getenv("LLM_API_BASE_URL", "http://localhost:8080")
-LLM_HTTP_TIMEOUT: float = _as_float(os.getenv("LLM_HTTP_TIMEOUT", "120"), 120.0)
+LLM_MODE:       str   = os.getenv("LLM_MODE", "ollama").lower()   # openai | ollama | http
+RAG_LLM_MODEL:  str   = os.getenv("RAG_LLM_MODEL", "qwen2.5:14b")
+OPENAI_API_KEY: str   = os.getenv("OPENAI_API_KEY", "")
+OPENAI_BASE_URL:str   = os.getenv("OPENAI_BASE_URL", "")
+LLM_API_BASE_URL: str = os.getenv("LLM_API_BASE_URL", "http://localhost:8080")
+LLM_HTTP_TIMEOUT:float= _as_float(os.getenv("LLM_HTTP_TIMEOUT"), 120.0)
 
 # ---------- 8) 检索行为参数 ----------
-USE_BM25:     bool  = _as_bool(os.getenv("USE_BM25", "1"), True)
-USE_RERANKER: bool  = _as_bool(os.getenv("USE_RERANKER", "1"), True)
-CONF_TH:      float = _as_float(os.getenv("CONF_TH", "0.40"), 0.40)
-TOP_K_FINAL:  int   = _as_int(os.getenv("TOP_K_FINAL", "4"), 4)
+USE_BM25:     bool  = _as_bool(os.getenv("USE_BM25"), True)
+USE_RERANKER: bool  = _as_bool(os.getenv("USE_RERANKER"), True)
+CONF_TH:      float = _as_float(os.getenv("CONF_TH"), 0.40)
+TOP_K_FINAL:  int   = _as_int(os.getenv("TOP_K_FINAL"), 4)
+
+# ---------- 9) 是否使用规则意图（临时跑链路） ----------
+USE_RULE_INTENT: bool = _as_bool(os.getenv("USE_RULE_INTENT"), False)
