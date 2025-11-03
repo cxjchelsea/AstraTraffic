@@ -7,7 +7,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
 
 # 导入底层实现
-from modules.generator.prompt import RAG_PROMPT_TEMPLATE, format_hits_to_context
+from modules.generator.prompt import RAG_PROMPT_TEMPLATE, format_hits_to_context, RAG_PROMPT_WITH_HISTORY_TEMPLATE
 
 
 def create_rag_prompt() -> PromptTemplate:
@@ -44,3 +44,21 @@ def format_context(documents: list[Document]) -> str:
     
     # 调用底层格式化函数
     return format_hits_to_context(hits)
+
+
+# ==================== 多轮对话支持 ====================
+
+def create_rag_prompt_with_history() -> PromptTemplate:
+    """
+    创建支持对话历史的 LangChain PromptTemplate（适配层）
+    使用底层 modules/generator/prompt 的模板文本
+    """
+    # 注意：模板中使用的是 history_section，但我们在 rag_chain 中会传入 history
+    # LangChain 会自动处理格式化，我们需要调整模板变量名
+    # 将模板中的 {history_section} 改为 {history}，因为我们传入的是格式化后的文本
+    template_with_history = RAG_PROMPT_WITH_HISTORY_TEMPLATE.replace("{history_section}", "{history}")
+    
+    return PromptTemplate(
+        input_variables=["query", "context", "history"],
+        template=template_with_history,
+    )

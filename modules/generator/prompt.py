@@ -74,3 +74,82 @@ def build_prompt(query: str, hits: List) -> str:
     context = format_hits_to_context(hits)
     return RAG_PROMPT_TEMPLATE.format(query=query, context=context)
 
+
+# ==================== 多轮对话支持 ====================
+
+# RAG Prompt 模板（支持历史对话）
+RAG_PROMPT_WITH_HISTORY_TEMPLATE = """你是严谨的中文智慧交通助手。仅依据"资料片段"回答；如果资料不足，请明确说"根据现有资料无法给出确定答案"，不要编造。
+
+{history_section}
+
+# 当前问题
+{query}
+
+# 资料片段（可能不完整）
+{context}
+
+# 输出要求（必须遵守）
+1) 先给出【核心结论】（3–5句，简洁明确）；
+2) 然后给出【建议/步骤】（如需查询具体路段/线路/时段，应提示用户补充信息；若问题涉及实时数据，请提醒以官方/平台实时公告为准）；
+3) 若问题涉及法规与处罚，用谨慎语气并提示"以当地官方发布为准"；
+4) 考虑对话历史，保持回答的连贯性和上下文一致性；
+5) 不得杜撰资料外的信息；信息不足要直说；
+6) 结尾列出引用：格式"参考：[S1][S2]…"。
+
+# 输出格式（照抄并填充）
+- 核心结论：
+- 建议/步骤：
+- 参考：[S1] [S2] …
+"""
+
+
+def format_chat_history(history: List[tuple]) -> str:
+    """
+    格式化对话历史用于Prompt
+    
+    Args:
+        history: 对话历史列表，格式为 [(用户问题, 助手回答), ...]
+    
+    Returns:
+        格式化后的历史文本，如果没有历史则返回空字符串
+    """
+    if not history:
+        return ""
+    
+    lines = ["# 对话历史（最近的{}轮）".format(len(history))]
+    for i, (user_q, assistant_a) in enumerate(history, 1):
+        # 截断过长的回答（只保留前150字）
+        truncated_answer = assistant_a[:150] + "..." if len(assistant_a) > 150 else assistant_a
+        lines.append(f"轮次{i}:")
+        lines.append(f"  用户：{user_q}")
+        lines.append(f"  助手：{truncated_answer}")
+    
+    return "\n".join(lines) + "\n"
+
+
+def build_prompt_with_history(query: str, hits: List, history: List[tuple] = None) -> str:
+    """
+    构建包含对话历史的完整 prompt 字符串
+    
+    Args:
+        query: 当前用户查询
+        hits: Hit 对象列表或包含 text 和 source 的字典列表
+        history: 对话历史列表，格式为 [(用户问题, 助手回答), ...]，可选
+    
+    Returns:
+        完整的 prompt 字符串
+    """
+    context = format_hits_to_context(hits)
+    history_text = format_chat_history(history) if history else ""
+    
+    if history_text:
+        history_section = history_text
+    else:
+        history_section = ""
+    
+    return RAG_PROMPT_WITH_HISTORY_TEMPLATE.format(
+        history_section=history_section,
+        query=query,
+        context=context
+    )
+
