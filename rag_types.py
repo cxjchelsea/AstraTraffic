@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+"""
+RAG 系统的数据类型定义（通用数据结构，不依赖特定框架）
+"""
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
@@ -34,3 +38,4 @@ class AnswerPack:
     hits: List[Hit]
     answer: str
     metrics: Metrics
+

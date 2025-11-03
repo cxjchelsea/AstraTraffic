@@ -1,25 +1,53 @@
-# Core
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-pydantic>=2.9.0
-requests>=2.32.0
-tqdm>=4.66.0
-python-dotenv>=1.0.1
+# ==========================
+# 🧠 Core Backend
+# ==========================
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.9.2
+requests==2.32.3
+tqdm==4.67.1
+python-dotenv==1.0.1
 
-# NLP / RAG
-jieba>=0.42.1
-rank-bm25>=0.2.2
-sentence-transformers>=3.1.0
-transformers>=4.44.0
-torch>=2.2.0             # CPU版；如需GPU请自行安装对应CUDA版
-faiss-cpu>=1.8.0.post1   # Windows/Mac/Linux 通用轮子；若装不上则临时注释
+# ==========================
+# 📚 NLP / RAG 基础
+# ==========================
+jieba==0.42.1
+rank-bm25==0.2.2
+faiss-cpu==1.7.4        # 如果 Windows 无法安装请注释掉
+numpy==1.26.4
+scipy==1.11.4
+scikit-learn==1.3.2
 
-# OpenAI / 兼容客户端
-openai>=1.44.0
+# ==========================
+# 🔍 向量模型 / Transformers
+# ==========================
+torch==2.3.1             # CPU 版；如需 GPU 可换对应 CUDA 版
+transformers
+sentence-transformers
+huggingface-hub==0.34.3
+tokenizers==0.22.1
 
-# Optional（数值）
-numpy>=1.26.0
-
+# ==========================
+# 🧩 PEFT / LoRA（意图模型）
+# ==========================
 peft
+accelerate
+bitsandbytes==0.43.1 ; platform_system != "Windows"
 
-hf_xet
+# ==========================
+# 🧱 LangChain 生态（RAG Pipeline）
+# ==========================
+openai==1.99.1
+langchain==0.3.27
+langsmith==0.4.31
+langchain-ollama
+langchain_community
+
+# ==========================
+# 🧰 辅助工具 / 可选
+# ==========================
+jinja2==3.1.6
+filelock==3.20.0
+colorama==0.4.6
+fsspec==2025.9.0          # 保证兼容 datasets<=4.3.0
+datasets

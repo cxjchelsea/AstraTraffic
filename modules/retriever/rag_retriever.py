@@ -35,30 +35,51 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 import jieba
+import torch
 
 # ---- 可选依赖的“柔性导入” ----
-try:
-    import faiss  # type: ignore
-except Exception:
-    faiss = None  # noqa
-
-try:
-    import torch  # type: ignore
-    from sentence_transformers import SentenceTransformer
-except Exception:
-    SentenceTransformer = None  # noqa
-    torch = None  # noqa
-
 try:
     from rank_bm25 import BM25Okapi
 except Exception:
     BM25Okapi = None  # noqa
 
+# --- faiss ---
 try:
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification  # type: ignore
-except Exception:
-    AutoTokenizer = None  # noqa
-    AutoModelForSequenceClassification = None  # noqa
+    import faiss  # type: ignore
+except Exception as e:
+    print("[Warn] faiss import failed:", repr(e))
+    faiss = None
+
+# --- torch / sentence-transformers ---
+torch = None
+SentenceTransformer = None
+ST_VERSION = "unavailable"
+try:
+    import torch as _torch  # type: ignore
+    torch = _torch
+except Exception as e:
+    print("[Warn] torch import failed:", repr(e))
+
+try:
+    import sentence_transformers as st
+    from sentence_transformers import SentenceTransformer as _ST
+    SentenceTransformer = _ST
+    ST_VERSION = getattr(st, "__version__", "unknown")
+    print(f"[Info] sentence-transformers loaded, version={ST_VERSION}")
+except Exception as e:
+    print("[ImportError] sentence-transformers 导入失败：", repr(e))
+    SentenceTransformer = None
+    ST_VERSION = "unavailable"
+
+# --- transformers (用于重排器) ---
+AutoTokenizer = None
+AutoModelForSequenceClassification = None
+try:
+    from transformers import AutoTokenizer as _AT, AutoModelForSequenceClassification as _AMFSC  # type: ignore
+    AutoTokenizer = _AT
+    AutoModelForSequenceClassification = _AMFSC
+except Exception as e:
+    print("[Warn] transformers import failed:", repr(e))
 
 
 # ================= 可调配置 =================
@@ -187,12 +208,14 @@ def iter_files(root: str) -> Iterable[str]:
 
 
 # ================= 表示层 =================
+
+
 class DenseEncoder:
     def __init__(self, model_name: str = EMBEDDING_MODEL, device: Optional[str] = None):
         if SentenceTransformer is None:
-            raise ImportError("sentence-transformers 未安装：pip install -U sentence-transformers")
-        # trust_remote_code=True 能安静加载，并兼容非原生 sbert 的 HF 模型目录
-        self.model = SentenceTransformer(model_name, trust_remote_code=True)
+            raise ImportError("sentence-transformers 导入失败（见上方日志）。")
+        print(f"[DenseEncoder] Using SentenceTransformer {ST_VERSION} -> {model_name}")
+        self.model = SentenceTransformer(model_name)  # 不要传 trust_remote_code
         if device:
             self.model = self.model.to(device)
 
@@ -209,29 +232,51 @@ class SparseBM25:
     def get_scores(self, query_tokens: List[str]) -> List[float]:
         return list(self.bm25.get_scores(query_tokens))
 
+# ===== 安全的 CrossEncoderReranker 定义（替换原有同名类） =====
+HAS_TORCH = torch is not None
+HAS_XENC = (
+    (AutoTokenizer is not None) and
+    (AutoModelForSequenceClassification is not None) and
+    HAS_TORCH
+)
 
-class CrossEncoderReranker:
-    def __init__(self, model_name: str = RERANKER_MODEL, device: Optional[str] = None):
-        if AutoTokenizer is None or AutoModelForSequenceClassification is None or torch is None:
-            raise ImportError("缺少 transformers/torch：pip install -U transformers torch")
-        self.tok = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        if device:
-            self.model.to(device)
-        self.model.eval()
+def _identity_decorator(fn):
+    return fn
 
-    @torch.no_grad()
-    def score(self, query: str, candidates: List[str], batch_size: int = 8) -> List[float]:
-        scores: List[float] = []
-        for i in range(0, len(candidates), batch_size):
-            batch = candidates[i:i+batch_size]
-            enc = self.tok([query]*len(batch), batch, truncation=True, padding=True, return_tensors='pt')
-            if next(self.model.parameters()).is_cuda:
-                enc = {k: v.cuda() for k, v in enc.items()}
-            logits = self.model(**enc).logits.view(-1)
-            probs = torch.sigmoid(logits)   # ← 转成 [0,1] 概率
-            scores.extend(probs.detach().cpu().tolist())
-        return scores
+_NO_GRAD = (torch.no_grad() if HAS_TORCH else _identity_decorator)
+
+if HAS_XENC:
+    class CrossEncoderReranker:
+        def __init__(self, model_name: str = RERANKER_MODEL, device: Optional[str] = None):
+            self.tok = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+            if device:
+                self.model.to(device)
+            self.model.eval()
+
+        @_NO_GRAD
+        def score(self, query: str, candidates: List[str], batch_size: int = 8) -> List[float]:
+            scores: List[float] = []
+            for i in range(0, len(candidates), batch_size):
+                batch = candidates[i:i+batch_size]
+                enc = self.tok([query]*len(batch), batch, truncation=True, padding=True, return_tensors='pt')
+                if next(self.model.parameters()).is_cuda:
+                    enc = {k: v.cuda() for k, v in enc.items()}
+                logits = self.model(**enc).logits.view(-1)
+                scores.extend(logits.detach().cpu().tolist())
+            return scores
+else:
+    class CrossEncoderReranker:
+        """
+        占位实现：当缺少 torch/transformers 时，构造即报错，避免导入期崩溃。
+        """
+        def __init__(self, *args, **kwargs):
+            raise ImportError("CrossEncoderReranker 不可用：缺少 torch/transformers。"
+                              "请设置 USE_RERANKER=0 或安装依赖。")
+
+        def score(self, query: str, candidates: List[str], batch_size: int = 8) -> List[float]:
+            return [0.0] * len(candidates)
+# ===== 以上整段替换 =====
 
 
 # ================= 向量索引 =================
