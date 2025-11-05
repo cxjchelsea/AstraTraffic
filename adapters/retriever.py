@@ -132,8 +132,8 @@ class ToolAwareRetriever(BaseRetriever):
         
         tool_selection = select_tool(query)  # 始终使用LLM
         
-        # 如果是实时工具（路况、地图等），不返回文档（在format_docs阶段处理）
-        if tool_selection.tool in ["realtime_traffic", "realtime_map"]:
+        # 如果是实时工具（路况、地图等）或none工具（日常对话），不返回文档
+        if tool_selection.tool in ["realtime_traffic", "realtime_map", "none"]:
             return []
         
         # 如果是知识库工具，执行检索

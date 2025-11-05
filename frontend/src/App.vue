@@ -72,11 +72,15 @@ const handleSendMessage = async (query) => {
     
     // 如果有地图数据，显示地图
     if (response.map_data) {
-      console.log('[App] 收到地图数据:', response.map_data)
+      if (import.meta.env.DEV) {
+        console.log('[App] 收到地图数据:', response.map_data)
+      }
       mapData.value = response.map_data
     } else {
-      console.log('[App] 响应中没有地图数据')
-      console.log('[App] 完整响应:', response)
+      if (import.meta.env.DEV) {
+        console.log('[App] 响应中没有地图数据')
+        console.log('[App] 完整响应:', response)
+      }
     }
   } catch (error) {
     // 清除处理中提示

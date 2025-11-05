@@ -14,6 +14,8 @@ class MapLocation:
     lat: float  # 纬度
     name: Optional[str] = None  # 地点名称
     address: Optional[str] = None  # 地址
+    type: Optional[str] = None  # POI类型，用于判断地点级别
+    adname: Optional[str] = None  # 行政区名称（如"大兴区"）
 
 
 @dataclass
@@ -24,6 +26,7 @@ class MapInfo:
     location_name: str = ""  # 地点名称
     city: Optional[str] = None  # 城市
     markers: Optional[List[Dict[str, Any]]] = None  # 标记点列表
+    bounds: Optional[Dict[str, float]] = None  # 边界范围 {northeast: {lng, lat}, southwest: {lng, lat}}
 
 
 class AmapMapAPI:
@@ -57,7 +60,7 @@ class AmapMapAPI:
                 "key": self.api_key,
                 "keywords": location_name,
                 "output": "json",
-                "extensions": "base"
+                "extensions": "all"  # 改为all以获取更多信息
             }
             
             if city:
@@ -97,21 +100,123 @@ class AmapMapAPI:
                 lng=lng,
                 lat=lat,
                 name=poi.get("name", location_name),
-                address=poi.get("address", "")
+                address=poi.get("address", ""),
+                type=poi.get("type", ""),  # POI类型
+                adname=poi.get("adname", "")  # 行政区名称
             )
             
         except Exception as e:
             print(f"搜索地点时发生异常: {e}")
             return None
     
-    def get_map_info(self, location_name: str, city: Optional[str] = None, zoom: int = 15) -> Optional[MapInfo]:
+    def _determine_zoom_level(self, location_name: str, location: MapLocation) -> int:
+        """
+        根据地点名称和类型智能判断缩放级别
+        
+        Args:
+            location_name: 地点名称
+            location: MapLocation对象
+            
+        Returns:
+            合适的缩放级别
+        """
+        name_lower = location_name.lower()
+        
+        # 判断是否为区县级别
+        if any(suffix in name_lower for suffix in ["区", "县", "市", "省"]):
+            # 区县级别：使用较小的缩放级别以显示完整区域
+            return 12
+        elif any(suffix in name_lower for suffix in ["街道", "镇", "乡", "社区", "村"]):
+            # 街道/乡镇级别
+            return 14
+        elif location.type:
+            # 根据POI类型判断
+            type_str = location.type.lower()
+            if any(t in type_str for t in ["行政区", "区县", "district"]):
+                return 12
+            elif any(t in type_str for t in ["街道", "社区", "street"]):
+                return 14
+            elif any(t in type_str for t in ["建筑物", "building", "大厦", "楼"]):
+                return 16
+            else:
+                # 默认根据名称中的关键词判断
+                if "区" in name_lower or "县" in name_lower:
+                    return 12
+                elif "街道" in name_lower or "镇" in name_lower:
+                    return 14
+                else:
+                    return 15  # 默认级别
+        else:
+            # 默认缩放级别
+            return 15
+    
+    def _get_district_bounds(self, location_name: str, city: Optional[str] = None) -> Optional[Dict[str, float]]:
+        """
+        尝试获取区县的边界范围（使用地理编码API）
+        
+        Args:
+            location_name: 地点名称
+            city: 城市名称
+            
+        Returns:
+            边界字典 {northeast: {lng, lat}, southwest: {lng, lat}}，失败返回None
+        """
+        try:
+            # 使用地理编码API获取边界
+            geocode_url = f"{self.BASE_URL}/geocode/geo"
+            params = {
+                "key": self.api_key,
+                "address": location_name,
+                "output": "json"
+            }
+            
+            if city:
+                params["city"] = city
+            
+            response = requests.get(geocode_url, params=params, timeout=10)
+            data = response.json()
+            
+            if data.get("status") != "1":
+                return None
+            
+            geocodes = data.get("geocodes", [])
+            if not geocodes:
+                return None
+            
+            geocode = geocodes[0]
+            # 尝试获取边界（如果API返回了bounds字段）
+            bounds_str = geocode.get("bounds", "")
+            if bounds_str:
+                # 格式通常是 "左下角经度,左下角纬度|右上角经度,右上角纬度"
+                parts = bounds_str.split("|")
+                if len(parts) == 2:
+                    sw = parts[0].split(",")
+                    ne = parts[1].split(",")
+                    if len(sw) == 2 and len(ne) == 2:
+                        return {
+                            "northeast": {
+                                "lng": float(ne[0]),
+                                "lat": float(ne[1])
+                            },
+                            "southwest": {
+                                "lng": float(sw[0]),
+                                "lat": float(sw[1])
+                            }
+                        }
+            
+            return None
+        except Exception as e:
+            print(f"获取边界范围时发生异常: {e}")
+            return None
+    
+    def get_map_info(self, location_name: str, city: Optional[str] = None, zoom: Optional[int] = None) -> Optional[MapInfo]:
         """
         获取完整的地图信息
         
         Args:
             location_name: 地点名称
             city: 城市名称（可选）
-            zoom: 缩放级别（默认15）
+            zoom: 缩放级别（可选，如果不提供则自动判断）
             
         Returns:
             MapInfo对象，如果查询失败返回None
@@ -119,6 +224,10 @@ class AmapMapAPI:
         location = self.search_location(location_name, city)
         if not location:
             return None
+        
+        # 如果没有指定缩放级别，则智能判断
+        if zoom is None:
+            zoom = self._determine_zoom_level(location_name, location)
         
         # 构建标记点
         markers = [{
@@ -128,12 +237,18 @@ class AmapMapAPI:
             "address": location.address or ""
         }]
         
+        # 尝试获取边界（对于区县级别）
+        bounds = None
+        if zoom <= 12:  # 区县级别才尝试获取边界
+            bounds = self._get_district_bounds(location_name, city)
+        
         return MapInfo(
             location=location,
             zoom=zoom,
             location_name=location.name or location_name,
             city=city,
-            markers=markers
+            markers=markers,
+            bounds=bounds
         )
     
     def generate_map_url(self, location: MapLocation, zoom: int = 15, size: str = "800*600") -> str:
@@ -191,4 +306,5 @@ def get_map_client(api_key: Optional[str] = None) -> Optional[AmapMapAPI]:
     
     _map_client = AmapMapAPI(key)
     return _map_client
+
 

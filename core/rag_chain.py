@@ -130,6 +130,17 @@ def _build_retrieve_docs_fn(
         else:
             intent = _create_default_intent()
         
+        # 如果工具是none（日常对话），跳过检索，直接返回空文档
+        if tool_selection and tool_selection.tool == "none":
+            return {
+                "query": query,
+                "intent": intent,
+                "documents": [],
+                "quality_ok": False,
+                "tool_selection": tool_selection,
+                **{k: v for k, v in inputs.items() if k not in ["query"]}
+            }
+        
         # 检索
         documents = retriever.get_relevant_documents(query)
         quality_ok = check_hits_quality(documents)
@@ -169,6 +180,19 @@ def _build_retrieve_docs_with_history_fn(
         else:
             intent = _create_default_intent()
         
+        # 如果工具是none（日常对话），跳过检索，直接返回空文档
+        if tool_selection and tool_selection.tool == "none":
+            return {
+                "query": original_query,
+                "rewritten_query": rewritten_query,
+                "intent": intent,
+                "documents": [],
+                "quality_ok": False,
+                "tool_selection": tool_selection,
+                "history": history,
+                **{k: v for k, v in inputs.items() if k not in ["query"]}
+            }
+        
         # 检索（使用改写后的查询）
         documents = retriever.get_relevant_documents(rewritten_query)
         quality_ok = check_hits_quality(documents)
@@ -200,10 +224,10 @@ def _build_format_docs_fn() -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         
         context = format_context(documents)
         
-        # 使用实时工具执行器统一处理实时API工具
+        # 使用实时工具执行器统一处理实时API工具（跳过none工具）
         tool_selection = inputs.get("tool_selection")
         realtime_result = None
-        if tool_selection and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
+        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -244,10 +268,10 @@ def _build_format_docs_with_history_fn() -> Callable[[Dict[str, Any]], Dict[str,
         
         context = format_context(documents)
         
-        # 使用实时工具执行器统一处理实时API工具
+        # 使用实时工具执行器统一处理实时API工具（跳过none工具）
         tool_selection = inputs.get("tool_selection")
         realtime_result = None
-        if tool_selection and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
+        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -290,6 +314,43 @@ def _build_generate_answer_fn(
         documents = inputs.get("documents", [])
         intent = inputs.get("intent")
         quality_ok = inputs.get("quality_ok", False)
+        
+        # 如果工具是none（日常对话），使用简单对话prompt直接让LLM回答
+        tool_selection = inputs.get("tool_selection")
+        if tool_selection and tool_selection.tool == "none":
+            try:
+                from modules.generator.prompt import build_chat_prompt
+                from adapters.llm import get_llm_client
+                
+                chat_prompt = build_chat_prompt(query)
+                llm_client = get_llm_client()
+                answer = llm_client(chat_prompt, temperature=0.7, max_tokens=100)
+                
+                result = {
+                    "query": query,
+                    "answer": answer.strip(),
+                    "documents": [],
+                    "intent": intent,
+                    "quality_ok": False,
+                }
+                if with_history:
+                    result["rewritten_query"] = inputs.get("rewritten_query", query)
+                    result["history"] = inputs.get("history", [])
+                return result
+            except Exception as e:
+                # 如果LLM调用失败，使用默认回复
+                answer = "你好！我是智慧交通助手，有什么可以帮助您的吗？"
+                result = {
+                    "query": query,
+                    "answer": answer,
+                    "documents": [],
+                    "intent": intent,
+                    "quality_ok": False,
+                }
+                if with_history:
+                    result["rewritten_query"] = inputs.get("rewritten_query", query)
+                    result["history"] = inputs.get("history", [])
+                return result
         
         # 如果没有文档或质量不合格，使用fallback适配器处理
         has_realtime_info = check_has_realtime_info(context)

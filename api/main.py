@@ -51,6 +51,7 @@ class MapDataResponse(BaseModel):
     markers: Optional[List[Dict[str, Any]]] = None
     show_traffic: Optional[bool] = False
     location_name: Optional[str] = None
+    bounds: Optional[Dict[str, Dict[str, float]]] = None  # 边界范围 {northeast: {lng, lat}, southwest: {lng, lat}}
 
 
 class ChatResponse(BaseModel):

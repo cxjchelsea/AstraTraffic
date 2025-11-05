@@ -24,6 +24,7 @@ defineEmits(['close-map'])
 const mapContainer = ref(null)
 let mapInstance = null
 let markers = []
+let trafficLayer = null  // 路况图层实例
 
 onMounted(() => {
   nextTick(() => {
@@ -39,9 +40,11 @@ watch(() => props.mapData, () => {
 
 const initMap = async () => {
   try {
-    // 调试：打印配置信息
-    console.log('[MapPanel] AMAP_WEB_KEY:', AMAP_WEB_KEY)
-    console.log('[MapPanel] mapData:', props.mapData)
+    // 调试：仅在开发环境打印配置信息
+    if (import.meta.env.DEV) {
+      console.log('[MapPanel] AMAP_WEB_KEY:', AMAP_WEB_KEY)
+      console.log('[MapPanel] mapData:', props.mapData)
+    }
     
     // 检查 API Key 是否配置
     if (!AMAP_WEB_KEY || AMAP_WEB_KEY === 'YOUR_AMAP_WEB_KEY') {
@@ -68,7 +71,7 @@ const initMap = async () => {
       plugins: AMAP_PLUGINS
     })
     
-    // 创建地图实例
+    // 创建地图实例（先设置默认中心点和缩放级别）
     mapInstance = new AMap.Map(mapContainer.value, {
       zoom: props.mapData.zoom || 15,
       center: [props.mapData.location.lng, props.mapData.location.lat],
@@ -89,16 +92,39 @@ const initMap = async () => {
     
     // 如果显示路况
     if (props.mapData.show_traffic) {
-      const trafficLayer = new AMap.TileLayer.Traffic({
+      trafficLayer = new AMap.TileLayer.Traffic({
         zIndex: 10,
         autoRefresh: true
       })
       mapInstance.add(trafficLayer)
+      if (import.meta.env.DEV) {
+        console.log('[MapPanel] 已启用实时路况图层')
+      }
+    }
+    
+    // 如果有边界信息，使用边界自动调整视野（优先于缩放级别）
+    if (props.mapData.bounds) {
+      const bounds = props.mapData.bounds
+      const bounds_obj = new AMap.Bounds(
+        [bounds.southwest.lng, bounds.southwest.lat],
+        [bounds.northeast.lng, bounds.northeast.lat]
+      )
+      // 调整地图视野以完整显示边界区域
+      mapInstance.setBounds(bounds_obj)
+      if (import.meta.env.DEV) {
+        console.log('[MapPanel] 使用边界自动调整视野:', bounds)
+      }
+    } else if (props.mapData.zoom) {
+      // 如果没有边界，使用指定的缩放级别
+      mapInstance.setZoom(props.mapData.zoom)
+      mapInstance.setCenter([props.mapData.location.lng, props.mapData.location.lat])
     }
     
     // 地图加载完成后的回调
     mapInstance.on('complete', () => {
-      console.log('地图加载完成')
+      if (import.meta.env.DEV) {
+        console.log('地图加载完成')
+      }
     })
     
   } catch (error) {
@@ -176,12 +202,50 @@ const showError = (message) => {
 const updateMap = () => {
   if (!mapInstance || !props.mapData) return
   
-  // 更新地图中心点
-  mapInstance.setCenter([props.mapData.location.lng, props.mapData.location.lat])
+  // 如果有边界信息，优先使用边界自动调整视野
+  if (props.mapData.bounds) {
+    const bounds = props.mapData.bounds
+    const bounds_obj = new AMap.Bounds(
+      [bounds.southwest.lng, bounds.southwest.lat],
+      [bounds.northeast.lng, bounds.northeast.lat]
+    )
+    mapInstance.setBounds(bounds_obj)
+    if (import.meta.env.DEV) {
+      console.log('[MapPanel] 更新地图视野（使用边界）:', bounds)
+    }
+  } else {
+    // 更新地图中心点
+    mapInstance.setCenter([props.mapData.location.lng, props.mapData.location.lat])
+    
+    // 更新缩放级别
+    if (props.mapData.zoom) {
+      mapInstance.setZoom(props.mapData.zoom)
+    }
+  }
   
-  // 更新缩放级别
-  if (props.mapData.zoom) {
-    mapInstance.setZoom(props.mapData.zoom)
+  // 更新路况图层
+  if (props.mapData.show_traffic) {
+    // 如果还没有路况图层，则添加
+    if (!trafficLayer) {
+      trafficLayer = new AMap.TileLayer.Traffic({
+        zIndex: 10,
+        autoRefresh: true
+      })
+      mapInstance.add(trafficLayer)
+      if (import.meta.env.DEV) {
+        console.log('[MapPanel] 已启用实时路况图层')
+      }
+    }
+    // 如果已有路况图层，它会自动刷新（autoRefresh: true）
+  } else {
+    // 如果不需要显示路况，则移除图层
+    if (trafficLayer) {
+      mapInstance.remove(trafficLayer)
+      trafficLayer = null
+      if (import.meta.env.DEV) {
+        console.log('[MapPanel] 已移除路况图层')
+      }
+    }
   }
   
   // 更新标记点

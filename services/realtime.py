@@ -121,7 +121,9 @@ def format_map_info_to_dict(map_info: MapInfo) -> Dict[str, Any]:
     Returns:
         字典格式的地图数据
     """
-    return {
+    from modules.config.settings import AMAP_DEFAULT_SHOW_TRAFFIC
+    
+    result = {
         "location": {
             "lng": map_info.location.lng,
             "lat": map_info.location.lat
@@ -129,8 +131,14 @@ def format_map_info_to_dict(map_info: MapInfo) -> Dict[str, Any]:
         "zoom": map_info.zoom,
         "location_name": map_info.location_name,
         "markers": map_info.markers or [],
-        "show_traffic": False  # 默认不显示路况图层
+        "show_traffic": AMAP_DEFAULT_SHOW_TRAFFIC  # 从配置文件读取
     }
+    
+    # 如果有边界信息，添加到结果中
+    if map_info.bounds:
+        result["bounds"] = map_info.bounds
+    
+    return result
 
 
 # ==================== 信息提取函数 ====================
@@ -222,6 +230,7 @@ def extract_location_from_query(query: str) -> Optional[str]:
 def _extract_location_by_rule(query: str) -> Optional[str]:
     """
     使用规则从查询中提取地点名称（简单fallback）
+    严格过滤，只提取明确的地名模式
     
     Args:
         query: 用户查询文本
@@ -231,8 +240,16 @@ def _extract_location_by_rule(query: str) -> Optional[str]:
     """
     import re
     
-    # 移除常见的地图相关词汇
-    patterns_to_remove = [
+    # 常见问候语和普通对话，不应提取为地名
+    common_greetings = ["你好", "再见", "谢谢", "不客气", "请问", "谢谢", "好的", "知道了", 
+                       "了解", "明白", "收到", "收到", "ok", "okay", "嗯", "哦", "啊"]
+    
+    query_lower = query.strip()
+    if query_lower in common_greetings or len(query_lower) <= 2:
+        return None
+    
+    # 明确的地图查询模式（必须包含地图相关关键词）
+    location_patterns = [
         r"查看(.+?)的地图",
         r"(.+?)的地图",
         r"(.+?)在哪里",
@@ -243,24 +260,18 @@ def _extract_location_by_rule(query: str) -> Optional[str]:
         r"显示(.+?)",
     ]
     
-    for pattern in patterns_to_remove:
+    for pattern in location_patterns:
         match = re.search(pattern, query)
         if match:
             location = match.group(1).strip()
             # 过滤掉太短的或明显不是地名的
-            if len(location) >= 2 and location not in ["的", "地图", "位置"]:
-                return location
+            if len(location) >= 2 and location not in ["的", "地图", "位置", "查看", "显示"]:
+                # 再次检查是否是常见问候语
+                if location.lower() not in common_greetings:
+                    return location
     
-    # 如果没有匹配到模式，尝试直接提取（去除常见词汇后的剩余部分）
-    words_to_remove = ["查看", "显示", "地图", "位置", "在哪里", "在哪", "的"]
-    remaining = query
-    for word in words_to_remove:
-        remaining = remaining.replace(word, "")
-    
-    remaining = remaining.strip()
-    if len(remaining) >= 2:
-        return remaining
-    
+    # 如果没有匹配到明确的地图查询模式，不进行模糊提取
+    # 避免将普通对话误识别为地名
     return None
 
 
@@ -477,4 +488,5 @@ def execute_realtime_tool(
     """
     executor = get_realtime_executor()
     return executor.execute_tool(tool_selection, query, **kwargs)
+
 

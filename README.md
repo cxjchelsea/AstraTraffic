@@ -4,7 +4,6 @@
 
 **AstraTraffic** 是一个面向个人用户的智能出行管家系统，旨在通过大语言模型和智能体技术，为用户提供全方位的出行服务支持。系统从知识问答起步，逐步发展为能够理解用户需求、规划出行路线、提供实时建议的智能助手。
 
----
 
 ## 🎯 项目愿景
 
@@ -28,7 +27,6 @@
 - 🧠 **智能工具选择**：基于 LLM 提示词的工具选择，自动路由到知识库或实时工具
 - 🔧 **灵活架构**：基于 LangChain 的模块化设计，适配器、业务逻辑、核心编排分离
 
----
 
 ## 🛠️ 技术实现
 
@@ -80,7 +78,6 @@
   - 快速测试：无需启动前后端服务，直接测试后端核心逻辑
   - 适合开发者和服务器环境
 
----
 
 ## 🏗️ 系统架构
 
@@ -133,8 +130,6 @@
 └─────────────────────────────────────────┘
 ```
 
----
-
 ## 🧩 技术栈
 
 ### 核心框架
@@ -159,7 +154,6 @@
 
 详细依赖请查看 [`requirements.txt`](requirements.txt)
 
----
 
 ## 🚀 快速开始
 
@@ -182,7 +176,7 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
-创建 `.env` 文件（参考 `settings.py` 中的配置项）：
+创建 `.env` 文件（参考 `modules/config/settings.py` 中的配置项）：
 
 ```bash
 # LLM 配置（至少配置一个）
@@ -193,6 +187,11 @@ OLLAMA_BASE_URL=your-url
 # 模型路径（可选，使用默认路径可跳过）
 INTENT_MODEL_PATH=data/models/ds_single
 EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+
+# 高德地图 API 配置（用于实时路况和地图查询）
+AMAP_API_KEY=your_amap_api_key
+AMAP_DEFAULT_CITY=北京市  # 默认城市名称
+AMAP_DEFAULT_SHOW_TRAFFIC=true  # 是否默认显示实时路况图层（true/false）
 ```
 
 ### 3. 准备知识库（首次使用）
@@ -228,6 +227,108 @@ python scripts/cli.py
 
 **注意**：CLI 主要用于开发调试，显示详细的调试信息（查询改写、意图识别等）。普通用户请使用 Web 界面。
 
+#### 开发环境与调试信息
+
+**调试日志自动切换机制**
+
+系统根据运行模式自动控制调试信息的显示：
+
+- **开发环境**（`npm run dev`）：
+  - 浏览器控制台会显示所有调试日志
+  - 包括地图配置、数据接收、路况图层状态等信息
+  - 便于开发时排查问题和了解系统运行状态
+
+**调试信息详细列表**
+
+开发环境下，浏览器控制台会显示以下调试信息：
+
+**1. 高德地图配置信息**（`amap.js`）
+- `[AMAP Config] VITE_AMAP_WEB_KEY from env:` - 从环境变量读取的 API Key
+- `[AMAP Config] Final AMAP_WEB_KEY:` - 最终使用的 API Key
+
+**2. 应用层调试信息**（`App.vue`）
+- `[App] 收到地图数据:` - 接收到地图数据时的完整数据对象
+- `[App] 响应中没有地图数据` - 当 API 响应中不包含地图数据时
+- `[App] 完整响应:` - API 的完整响应数据（用于调试）
+
+**3. 地图面板调试信息**（`MapPanel.vue`）
+- `[MapPanel] AMAP_WEB_KEY:` - 地图组件使用的 API Key
+- `[MapPanel] mapData:` - 地图组件接收到的完整数据对象
+- `[MapPanel] 已启用实时路况图层` - 路况图层启用提示
+- `[MapPanel] 已移除路况图层` - 路况图层移除提示
+- `[MapPanel] 使用边界自动调整视野:` - 使用边界信息调整地图视野时的边界数据
+- `[MapPanel] 更新地图视野（使用边界）:` - 更新地图视野时的边界信息
+- `地图加载完成` - 地图实例初始化完成提示
+
+**调试信息示例**
+
+```
+[AMAP Config] VITE_AMAP_WEB_KEY from env: xx
+[AMAP Config] Final AMAP_WEB_KEY: xx
+[MapPanel] AMAP_WEB_KEY: xx
+[MapPanel] mapData: Proxy(Object) {location: {…}, zoom: 15, markers: Array(1), show_traffic: true, location_name: '二环', …}
+[App] 收到地图数据: {location: {…}, zoom: 15, markers: Array(1), show_traffic: true, location_name: '二环', …}
+[MapPanel] 已启用实时路况图层
+[MapPanel] 使用边界自动调整视野: {northeast: {…}, southwest: {…}}
+地图加载完成
+```
+
+- **生产环境**（`npm run build`）：
+  - 调试日志自动隐藏，控制台保持干净
+  - 错误和警告信息仍会显示，便于问题排查
+  - 提升用户体验，减少控制台干扰
+
+**警告信息**（始终显示，不受环境影响）
+
+以下警告信息在所有环境下都会显示，用于提示配置问题：
+- `[MapPanel] API Key未配置` - API Key 未正确配置时的警告
+- `[MapPanel] 地图数据不完整:` - 地图数据缺失或格式错误时的警告
+
+**环境自动识别**
+
+Vite 会根据运行命令自动判断环境模式：
+
+| 运行命令 | 环境模式 | `import.meta.env.DEV` | 调试日志 |
+|---------|---------|----------------------|---------|
+| `npm run dev` | 开发环境 | `true` | ✅ 显示 |
+| `npm run build` | 生产环境 | `false` | ❌ 隐藏 |
+
+**代码实现**
+
+所有调试日志都使用环境判断：
+
+```javascript
+// 只在开发环境显示调试信息
+if (import.meta.env.DEV) {
+  console.log('[MapPanel] 地图数据:', mapData)
+  console.log('[App] 收到地图数据:', response.map_data)
+}
+```
+
+**手动指定模式**（高级用法）
+
+如果需要手动指定环境模式，可以使用：
+
+```bash
+# 开发模式运行（显示调试日志）
+npm run dev
+
+# 生产模式运行开发服务器（隐藏调试日志）
+npm run dev:prod
+
+# 构建生产版本（默认生产模式，隐藏调试日志）
+npm run build
+
+# 构建开发版本（显示调试日志）
+npm run build:dev
+```
+
+**注意事项**
+
+- Canvas2D 性能提示：这是高德地图 JS API 内部的性能提示，不影响功能，可以忽略
+- 错误日志始终显示：`console.error` 和 `console.warn` 在所有环境下都会显示，便于问题排查
+- 环境变量：从项目根目录的 `.env` 文件读取，支持 `VITE_` 前缀的环境变量
+
 ### 5. 示例对话
 
 ```
@@ -243,58 +344,6 @@ python scripts/cli.py
 
 - 参考：[S1] [S2]
 ```
-
----
-
-## 📁 项目结构
-
-```
-AstraTraffic/
-├── core/                    # 核心编排
-│   └── rag_chain.py        # RAG 流程编排（LCEL）
-│
-├── adapters/               # LangChain 适配器
-│   ├── retriever.py        # 检索适配器
-│   ├── llm.py              # LLM 适配器
-│   ├── prompt.py           # Prompt 适配器
-│   └── query_rewriter.py   # 查询改写适配器
-│
-├── services/               # 业务逻辑
-│   ├── tool_selector.py    # 工具选择（LLM决策）
-│   ├── quality.py          # 质量检查
-│   ├── fallback.py         # 回退逻辑
-│   ├── realtime_tool.py    # 实时工具执行
-│   ├── realtime_handler.py # 实时数据处理
-│   └── input_handler.py    # 输入处理
-│
-├── modules/                # 底层实现
-│   ├── config/             # 配置管理（settings, tool_config）
-│   ├── types/             # 类型定义
-│   ├── generator/          # Prompt & 消息模板
-│   ├── chat/              # 对话历史管理
-│   ├── retriever/         # 检索实现（FAISS + BM25）
-│   ├── realtime/          # 实时API封装
-│   └── (intent已归档至 archive/intent_classification/)
-│
-├── data/
-│   ├── knowledge/          # 知识库原始文件
-│   ├── storage/            # FAISS 索引存储
-│   └── models/             # 预训练模型
-│
-├── scripts/
-│   └── cli.py              # 命令行交互工具
-│
-├── lc/                     # 向后兼容层（已废弃）
-│   └── __init__.py         # 兼容旧导入路径
-│
-├── rag_types.py            # 数据类型定义（向后兼容）
-├── settings.py             # 全局配置（向后兼容）
-└── requirements.txt        # 依赖列表
-```
-
-详细结构说明请查看 [`project_structure.md`](project_structure.md)
-
----
 
 ## 🔧 核心功能说明
 
@@ -345,6 +394,7 @@ AstraTraffic/
 #### 第二阶段：实时数据与可视化
 - [x] 实时路况查询（高德地图 API）
 - [x] 实时地图可视化（高德地图 JavaScript API）
+- [x] 实时路况图层显示（可配置，默认启用）
 - [x] Web 前端界面（Vue 3 + FastAPI）
 - [x] 前后端数据联动
 
@@ -353,7 +403,6 @@ AstraTraffic/
 - [x] 基于上下文的查询改写
 - [x] 多用户并发支持
 
----
 
 ### 🚀 下一阶段规划
 
@@ -407,19 +456,16 @@ AstraTraffic/
 - **语音交互**：支持语音输入和语音回复
 - **移动端应用**：开发移动端 App，提供更便捷的使用体验
 
----
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
----
 
 ## 📜 许可证
 
 本项目基于 **MIT License** 开源。
 
----
 
 ## 💡 为什么叫 "AstraTraffic"？
 
@@ -427,6 +473,5 @@ AstraTraffic/
 
 从知识问答开始，最终成长为全方位的个人出行管家——这是我们正在走的路。🌟
 
----
 
 **Note**: 这是一个正在积极开发中的项目，欢迎反馈和建议！让我们一起打造更好的出行体验！🚀

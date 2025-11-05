@@ -110,3 +110,4 @@ USE_TOOL_SELECTOR: bool = _as_bool(os.getenv("USE_TOOL_SELECTOR"), True)  # 默�
 # ---------- 11) 实时路况API配置（高德地图） ----------
 AMAP_API_KEY: str = os.getenv("AMAP_API_KEY", "")
 AMAP_DEFAULT_CITY: str = os.getenv("AMAP_DEFAULT_CITY", "北京市")  # 默认城市名称
+AMAP_DEFAULT_SHOW_TRAFFIC: bool = _as_bool(os.getenv("AMAP_DEFAULT_SHOW_TRAFFIC"), True)  # 默认是否显示实时路况图层

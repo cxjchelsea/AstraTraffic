@@ -111,8 +111,8 @@ _TOOL_CONFIGS: Dict[str, ToolConfig] = {
     ),
     "none": ToolConfig(
         tool_id="none",
-        intent_label="未知",
-        description="无需工具",
+        intent_label="日常对话",
+        description="日常对话工具（用于问候语、简单对话等，不需要知识库和实时工具，直接由LLM友好回答）",
         kb_name=None,
         category="special",
     ),
@@ -159,11 +159,10 @@ def get_tool_descriptions() -> List[Tuple[str, str]]:
     Returns:
         List[Tuple[str, str]]: (工具名称, 工具描述) 的列表
     """
-    # 排除特殊工具（none），只返回可用工具
+    # 包含所有工具，包括none（用于日常对话）
     return [
         (config.tool_id, config.description)
         for tool_id, config in _TOOL_CONFIGS.items()
-        if config.category != "special"
     ]
 
 
