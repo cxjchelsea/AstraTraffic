@@ -9,6 +9,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
+from typing import List
 from dotenv import load_dotenv
 
 # ---------- 1) 工具：类型与路径解析 ----------
@@ -102,3 +103,10 @@ TOP_K_FINAL:  int   = _as_int(os.getenv("TOP_K_FINAL"), 4)
 
 # ---------- 9) 是否使用规则意图（临时跑链路） ----------
 USE_RULE_INTENT: bool = _as_bool(os.getenv("USE_RULE_INTENT"), False)
+
+# ---------- 10) Tool选择器配置 ----------
+USE_TOOL_SELECTOR: bool = _as_bool(os.getenv("USE_TOOL_SELECTOR"), True)  # 默认使用tool选择器（仅LLM模式）
+
+# ---------- 11) 实时路况API配置（高德地图） ----------
+AMAP_API_KEY: str = os.getenv("AMAP_API_KEY", "")
+AMAP_DEFAULT_CITY: str = os.getenv("AMAP_DEFAULT_CITY", "北京市")  # 默认城市名称

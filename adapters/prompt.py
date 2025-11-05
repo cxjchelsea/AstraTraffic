@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-LangChain Prompt 适配器
-调用底层 modules/generator/prompt 实现，适配为 LangChain 格式
+Prompt适配器（LangChain接口适配）
+职责：将底层Prompt模板适配为 LangChain PromptTemplate 接口
 """
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
@@ -62,3 +62,4 @@ def create_rag_prompt_with_history() -> PromptTemplate:
         input_variables=["query", "context", "history"],
         template=template_with_history,
     )
+

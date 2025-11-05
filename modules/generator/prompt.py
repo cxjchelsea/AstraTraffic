@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Prompt 模板（底层实现，不依赖 LangChain）
-包含交通领域 RAG 的提示词模板和通用格式化逻辑
+职责：管理所有发送给LLM的prompt模板（输入给LLM的内容）
+包含：
+- RAG问答的prompt模板
+- Tool选择的prompt模板
+- 道路名称提取的prompt模板
+- 查询改写的prompt模板（在query_rewriter.py中）
 """
 from typing import List, Union, Dict, Any
 
@@ -152,4 +157,69 @@ def build_prompt_with_history(query: str, hits: List, history: List[tuple] = Non
         query=query,
         context=context
     )
+
+
+# ==================== Tool选择器Prompt ====================
+
+TOOL_SELECTION_PROMPT_TEMPLATE = """可用工具：
+{tools_description}
+
+请根据用户查询，选择最合适的工具。只返回工具名称（如：kb_law 或 realtime_traffic），不要返回其他内容。
+
+用户查询：{query}
+
+选择的工具："""
+
+
+def build_tool_selection_prompt(query: str, tool_descriptions: List[tuple]) -> str:
+    """
+    构建Tool选择器的prompt
+    
+    Args:
+        query: 用户查询
+        tool_descriptions: 工具描述列表，格式为 [(工具名称, 工具描述), ...]
+    
+    Returns:
+        完整的prompt字符串
+    """
+    tools_lines = []
+    for i, (tool_name, tool_desc) in enumerate(tool_descriptions, 1):
+        tools_lines.append(f"{i}. {tool_name} - {tool_desc}")
+    
+    tools_description = "\n".join(tools_lines)
+    
+    return TOOL_SELECTION_PROMPT_TEMPLATE.format(
+        tools_description=tools_description,
+        query=query
+    )
+
+
+# ==================== 道路名称提取Prompt ====================
+
+ROAD_NAME_EXTRACTION_PROMPT_TEMPLATE = """从以下用户查询中提取道路名称。只返回道路名称本身，不要包含其他内容（如"的路况"、"怎么样"等）。
+
+如果查询中没有明确提及道路名称，请返回"无"。
+
+示例：
+- 查询："中关村大街的路况怎么样？" → 输出：中关村大街
+- 查询："三环路拥堵情况" → 输出：三环路
+- 查询："长安街现在怎么样" → 输出：长安街
+- 查询："北京现在哪些地方堵车？" → 输出：无
+
+用户查询：{query}
+
+提取的道路名称："""
+
+
+def build_road_name_extraction_prompt(query: str) -> str:
+    """
+    构建道路名称提取的prompt
+    
+    Args:
+        query: 用户查询
+    
+    Returns:
+        完整的prompt字符串
+    """
+    return ROAD_NAME_EXTRACTION_PROMPT_TEMPLATE.format(query=query)
 

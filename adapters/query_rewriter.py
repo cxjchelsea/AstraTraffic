@@ -1,19 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-对话管理适配器
-将底层 modules/chat 模块适配为 LangChain 使用
+查询改写适配器（LangChain接口适配）
+职责：将底层查询改写逻辑适配为适配层接口
 """
 from typing import List, Tuple
-
-# 导入底层实现
-from modules.chat.history import ChatHistoryManager, get_history_manager as _get_history_manager
-from modules.chat.query_rewriter import rewrite_query_with_history as _rewrite_query_with_history
-from lc.llm_adapter import get_llm_client
-
-
-def get_history_manager() -> ChatHistoryManager:
-    """获取全局历史管理器实例（适配层）"""
-    return _get_history_manager()
+from modules.generator.query_rewriter import rewrite_query_with_history as _rewrite_query_with_history
+from adapters.llm import get_llm_client
 
 
 def rewrite_query_with_history(

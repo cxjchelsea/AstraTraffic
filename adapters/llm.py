@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-LangChain LLM 适配器
+LLM适配器（LangChain接口适配）
+职责：将底层LLM客户端适配为 LangChain BaseLanguageModel 接口
 """
 from typing import Optional
 from langchain_core.language_models import BaseLanguageModel
@@ -10,7 +11,7 @@ from pydantic import Field
 
 import os
 import requests
-from settings import (
+from modules.config.settings import (
     LLM_MODE, RAG_LLM_MODEL, OPENAI_API_KEY, OPENAI_BASE_URL,
     LLM_API_BASE_URL, LLM_HTTP_TIMEOUT
 )
@@ -39,10 +40,32 @@ def get_llm_client():
         timeout = LLM_HTTP_TIMEOUT
         def gen(prompt: str, temperature: float = 0.2, max_tokens: int = 700) -> str:
             payload = {"model": model, "prompt": prompt, "options": {"temperature": temperature, "num_predict": max_tokens}, "stream": False}
-            r = requests.post(f"{base}/api/generate", json=payload, timeout=timeout)
-            r.raise_for_status()
-            data = r.json()
-            return (data.get("response") or data.get("text") or data.get("output") or "").strip()
+            try:
+                r = requests.post(f"{base}/api/generate", json=payload, timeout=timeout)
+                r.raise_for_status()
+                data = r.json()
+                return (data.get("response") or data.get("text") or data.get("output") or "").strip()
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"无法连接到Ollama服务 ({base})。请检查服务是否正在运行。"
+                raise ConnectionError(error_msg) from e
+            except requests.exceptions.Timeout as e:
+                error_msg = f"Ollama服务请求超时 (超过{timeout}秒)。请检查服务状态或增加超时时间。"
+                raise TimeoutError(error_msg) from e
+            except requests.exceptions.HTTPError as e:
+                status_code = getattr(e.response, 'status_code', '未知') if hasattr(e, 'response') and e.response is not None else "未知"
+                error_detail = ""
+                try:
+                    if hasattr(e, 'response') and e.response is not None:
+                        error_text = e.response.text[:200] if e.response.text else ""
+                        if error_text:
+                            error_detail = f" 错误详情: {error_text}"
+                except:
+                    pass
+                error_msg = f"Ollama服务返回HTTP错误 {status_code}{error_detail}。请检查模型名称({model})是否正确，或服务是否正常运行。"
+                raise RuntimeError(error_msg) from e
+            except Exception as e:
+                error_msg = f"调用Ollama服务时发生未知错误: {str(e)}"
+                raise RuntimeError(error_msg) from e
         return gen
 
     # 通用 HTTP：POST 到 LLM_API_BASE_URL
@@ -131,3 +154,4 @@ def get_langchain_llm() -> BaseLanguageModel:
         temperature=0.2,
         max_tokens=700,
     )
+

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-查询改写模块（使用LLM）
-基于对话历史将当前查询改写为完整查询
+查询改写模块（底层实现，使用LLM）
+职责：基于对话历史将当前查询改写为完整、清晰的查询
+属于generator模块，因为使用LLM进行生成/改写
 """
 from typing import List, Tuple, Optional, Callable
 
@@ -120,4 +121,5 @@ def rewrite_query_with_session(
     """
     history = history_manager.get_history(session_id, max_turns=max_history_turns)
     return rewrite_query_with_history(current_query, history, llm_client, max_history_turns)
+
 

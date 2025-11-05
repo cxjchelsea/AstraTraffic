@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-对话历史管理模块（内存存储）
-管理多轮对话的历史记录
+对话历史管理模块（底层实现，内存存储）
+职责：管理多轮对话的历史记录
+功能：
+- 存储对话历史（用户问题、助手回答）
+- 提供历史查询接口
+- 线程安全的会话管理
+注意：查询改写功能已移至 modules/generator/query_rewriter.py
 """
 from typing import List, Tuple, Optional, Dict
 from datetime import datetime
@@ -101,4 +106,5 @@ _history_manager = ChatHistoryManager(max_history_per_session=10)
 def get_history_manager() -> ChatHistoryManager:
     """获取全局历史管理器实例"""
     return _history_manager
+
 

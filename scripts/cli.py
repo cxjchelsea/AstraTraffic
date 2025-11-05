@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()  # 会自动读取项目根目录的 .env
 
 # 使用多轮对话版本
-from lc.rag_chain import rag_answer_with_history
-from lc.chat_adapter import get_history_manager
+from core.rag_chain import rag_answer_with_history
+from services.input_handler import get_history_manager
 
 
 def main():
@@ -55,7 +55,9 @@ def main():
                 history = history_manager.get_history(session_id, max_turns=5)
                 print(f"💬 当前使用 {len(history)} 轮历史对话")
             
-            if not pack.hits:
+            # 特殊处理：路况查询即使没有hits，如果有答案也显示
+            is_traffic_query = pack.intent.label == "路况查询"
+            if not pack.hits and not (is_traffic_query and pack.answer and len(pack.answer.strip()) > 0):
                 print("🤔 没有把握，建议换个问法或补充信息。\n")
                 continue
             
