@@ -83,7 +83,7 @@ except Exception as e:
 
 
 # ================= 可调配置 =================
-from settings import (
+from modules.config.settings import (
     STORAGE_DIR, EMBEDDING_MODEL, RERANKER_MODEL
 )
 

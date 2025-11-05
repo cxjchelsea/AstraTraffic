@@ -53,9 +53,38 @@ def _extractive_fallback(documents: list[Document], max_sents: int = 5) -> str:
     return body + ("\n\n" + refs if refs else "")
 
 
-def _postprocess_answer(text: str, documents: list[Document]) -> str:
-    """后处理答案，添加引用"""
+def _postprocess_answer(text: str, documents: list[Document], tool_selection=None) -> str:
+    """
+    后处理答案，添加引用
+    
+    Args:
+        text: LLM生成的答案文本
+        documents: 检索到的文档列表
+        tool_selection: 工具选择结果（可选），用于判断是否为实时工具查询
+    """
     text = (text or "").strip()
+    
+    # 如果是实时工具查询，移除LLM生成的引用标记（实时工具查询不依赖知识库文档）
+    if tool_selection and tool_selection.tool == "realtime_traffic":
+        # 移除可能存在的引用标记行（如 "- 参考：[S1] [S2] …" 或 "参考：[S1]"）
+        import re
+        # 匹配以"-"、"- "或"参考："开头，后面跟着 [S数字] 的整行（包括前后换行符）
+        # 匹配格式：- 参考：[S1] 或 - 参考：[S1] [S2] 或 参考：[S1] 等
+        # 使用多行模式，匹配整行
+        lines = text.split('\n')
+        filtered_lines = []
+        for line in lines:
+            # 检查是否是引用标记行
+            if re.match(r'^\s*-?\s*参考：\s*\[S\d+\]', line.strip()):
+                # 跳过引用标记行
+                continue
+            filtered_lines.append(line)
+        text = '\n'.join(filtered_lines)
+        # 清理多余的换行符
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+    
+    # 如果有文档，添加引用标记
     refs = "参考：" + "".join(f"[S{i+1}]" for i in range(len(documents))) if documents else ""
     if text and "参考：" not in text and refs:
         text += "\n\n" + refs
@@ -304,8 +333,9 @@ def _build_generate_answer_fn(
             # 兜底：抽取式回答
             answer = _extractive_fallback(documents)
         
-        # 后处理
-        answer = _postprocess_answer(answer, documents)
+        # 后处理（传递tool_selection以判断是否需要添加引用）
+        tool_selection = inputs.get("tool_selection")
+        answer = _postprocess_answer(answer, documents, tool_selection=tool_selection)
         
         # 转换为 Hit 列表
         hits = _convert_documents_to_hits(documents)
