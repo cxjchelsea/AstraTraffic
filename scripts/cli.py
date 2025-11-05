@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-LangChain 版本的 CLI
+开发调试工具 - CLI 命令行接口
 使用 LangChain 架构的交互式命令行工具
+
+用途：
+- 开发调试：显示详细的调试信息（查询改写、意图识别、历史对话等）
+- 快速测试：无需启动前后端服务，直接测试后端核心逻辑
+- 服务器环境：在无GUI环境下使用
+
+注意：普通用户请使用 Web 前端界面（frontend/），体验更好且支持可视化
 """
 from pathlib import Path
 import os

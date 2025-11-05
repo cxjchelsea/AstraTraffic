@@ -30,6 +30,14 @@ data/storage/
 !data/models/.keep
 !data/storage/.keep
 intent/model_packing
+
+# Archive 目录中的大文件（模型、训练数据等）
+archive/**/models/**/*.bin
+archive/**/models/**/*.safetensors
+archive/**/models/**/*.pt
+archive/**/models/**/*.pth
+archive/**/data/**/*.json
+archive/**/data/**/*.jsonl
 # ==========================
 # 📚 知识库原始数据（可选）
 # 若知识库大或私密，可取消注释以下两行

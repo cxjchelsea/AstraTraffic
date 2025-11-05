@@ -19,9 +19,10 @@ from services.fallback import (
     get_no_document_response,
     should_fallback,
     check_has_realtime_info,
+    extractive_fallback,
 )
 from services.tool_selector import select_tool
-from services.realtime_tool import execute_realtime_tool
+from services.realtime import execute_realtime_tool
 from services.input_handler import get_history_manager
 
 # 底层实现导入
@@ -31,27 +32,6 @@ from modules.config.settings import USE_BM25, USE_RERANKER, TOP_K_FINAL, CONF_TH
 
 
 # ==================== 工具函数 ====================
-
-def _extractive_fallback(documents: list[Document], max_sents: int = 5) -> str:
-    """抽取式兜底（无 LLM 或 LLM 失败时）"""
-    import re
-    
-    def split(text: str) -> list[str]:
-        return [s for s in re.split(r"[。！？!?；;]\s*", (text or "")) if s]
-    
-    sents = []
-    for doc in documents:
-        sents += split(doc.page_content)
-        if len(sents) >= max_sents:
-            break
-    
-    if not sents:
-        return "根据现有资料无法给出确定答案。"
-    
-    body = "；".join(sents[:max_sents]) + "。"
-    refs = "参考：" + "".join(f"[S{i+1}]" for i in range(len(documents))) if documents else ""
-    return body + ("\n\n" + refs if refs else "")
-
 
 def _postprocess_answer(text: str, documents: list[Document], tool_selection=None) -> str:
     """
@@ -65,7 +45,7 @@ def _postprocess_answer(text: str, documents: list[Document], tool_selection=Non
     text = (text or "").strip()
     
     # 如果是实时工具查询，移除LLM生成的引用标记（实时工具查询不依赖知识库文档）
-    if tool_selection and tool_selection.tool == "realtime_traffic":
+    if tool_selection and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
         # 移除可能存在的引用标记行（如 "- 参考：[S1] [S2] …" 或 "参考：[S1]"）
         import re
         # 匹配以"-"、"- "或"参考："开头，后面跟着 [S数字] 的整行（包括前后换行符）
@@ -222,7 +202,8 @@ def _build_format_docs_fn() -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         
         # 使用实时工具执行器统一处理实时API工具
         tool_selection = inputs.get("tool_selection")
-        if tool_selection and tool_selection.tool == "realtime_traffic":
+        realtime_result = None
+        if tool_selection and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -238,6 +219,10 @@ def _build_format_docs_fn() -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         for key in ["rewritten_query", "history", "intent", "tool_selection"]:
             if key in inputs:
                 result[key] = inputs[key]
+        
+        # 保存实时工具结果（包含地图数据）
+        if realtime_result:
+            result["realtime_result"] = realtime_result
         
         return result
     
@@ -261,7 +246,8 @@ def _build_format_docs_with_history_fn() -> Callable[[Dict[str, Any]], Dict[str,
         
         # 使用实时工具执行器统一处理实时API工具
         tool_selection = inputs.get("tool_selection")
-        if tool_selection and tool_selection.tool == "realtime_traffic":
+        realtime_result = None
+        if tool_selection and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -270,7 +256,7 @@ def _build_format_docs_with_history_fn() -> Callable[[Dict[str, Any]], Dict[str,
         from modules.generator.prompt import format_chat_history
         history_text = format_chat_history(history) if history else ""
         
-        return {
+        result = {
             "query": query,
             "rewritten_query": inputs.get("rewritten_query", query),
             "context": context,
@@ -281,6 +267,12 @@ def _build_format_docs_with_history_fn() -> Callable[[Dict[str, Any]], Dict[str,
             "intent": inputs.get("intent"),
             "tool_selection": inputs.get("tool_selection"),
         }
+        
+        # 保存实时工具结果（包含地图数据）
+        if realtime_result:
+            result["realtime_result"] = realtime_result
+        
+        return result
     
     return format_docs
 
@@ -330,8 +322,8 @@ def _build_generate_answer_fn(
             chain = prompt | llm | StrOutputParser()
             answer = chain.invoke(prompt_input)
         except Exception as e:
-            # 兜底：抽取式回答
-            answer = _extractive_fallback(documents)
+            # 兜底：抽取式回答（LLM调用失败但有文档时）
+            answer = extractive_fallback(documents)
         
         # 后处理（传递tool_selection以判断是否需要添加引用）
         tool_selection = inputs.get("tool_selection")
@@ -343,6 +335,12 @@ def _build_generate_answer_fn(
         # 获取 KB 名称
         kb = documents[0].metadata.get("kb_name") if documents else None
         
+        # 提取地图数据（如果存在）
+        map_data = None
+        realtime_result = inputs.get("realtime_result")
+        if realtime_result and realtime_result.metadata:
+            map_data = realtime_result.metadata.get("map_data")
+        
         result = {
             "query": query,
             "answer": answer,
@@ -352,6 +350,10 @@ def _build_generate_answer_fn(
             "kb": kb,
             "quality_ok": True,
         }
+        
+        # 添加地图数据到结果中（将在后续构建Metrics时使用）
+        if map_data:
+            result["map_data"] = map_data
         
         if with_history:
             result["rewritten_query"] = inputs.get("rewritten_query", query)
@@ -615,16 +617,24 @@ def rag_answer_with_history(
     
     rewritten_query = result.get("rewritten_query", query)
     
+    # 构建notes，包含地图数据（如果存在）
+    notes = {
+        "langchain": True,
+        "quality_ok": result.get("quality_ok", False),
+        "has_history": len(history) > 0,
+        "rewritten_query": rewritten_query if rewritten_query != query else None,
+    }
+    
+    # 添加地图数据（如果存在）
+    map_data = result.get("map_data")
+    if map_data:
+        notes["map_data"] = map_data
+    
     metrics = Metrics(
         used_kb=result.get("kb"),
         intent_conf=intent.score,
         conf_th=conf_th,
-        notes={
-            "langchain": True,
-            "quality_ok": result.get("quality_ok", False),
-            "has_history": len(history) > 0,
-            "rewritten_query": rewritten_query if rewritten_query != query else None,
-        }
+        notes=notes
     )
     
     # 保存本轮对话到历史

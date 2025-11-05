@@ -223,3 +223,33 @@ def build_road_name_extraction_prompt(query: str) -> str:
     """
     return ROAD_NAME_EXTRACTION_PROMPT_TEMPLATE.format(query=query)
 
+
+# ==================== 地点名称提取 Prompt ====================
+
+LOCATION_EXTRACTION_PROMPT_TEMPLATE = """请从以下用户查询中提取地点名称（如城市、区域、建筑物、景点等）。
+
+如果查询中没有明确提及地点名称，请返回"无"。
+
+示例：
+- 查询："查看中关村的地图" → 输出：中关村
+- 查询："天安门在哪里" → 输出：天安门
+- 查询："北京市朝阳区的地图" → 输出：北京市朝阳区
+- 查询："显示地图" → 输出：无
+
+用户查询：{query}
+
+提取的地点名称："""
+
+
+def build_location_extraction_prompt(query: str) -> str:
+    """
+    构建地点名称提取的prompt
+    
+    Args:
+        query: 用户查询
+    
+    Returns:
+        完整的prompt字符串
+    """
+    return LOCATION_EXTRACTION_PROMPT_TEMPLATE.format(query=query)
+

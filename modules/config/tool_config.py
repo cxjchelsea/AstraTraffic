@@ -22,6 +22,7 @@ ToolID = Literal[
     "kb_health",
     "kb_report",
     "realtime_traffic",
+    "realtime_map",
     "none",
 ]
 
@@ -98,6 +99,13 @@ _TOOL_CONFIGS: Dict[str, ToolConfig] = {
         tool_id="realtime_traffic",
         intent_label="路况查询",
         description="实时路况API（查询当前道路拥堵情况）",
+        kb_name=None,
+        category="realtime",
+    ),
+    "realtime_map": ToolConfig(
+        tool_id="realtime_map",
+        intent_label="地图查看",
+        description="实时地图查看API（查看指定位置的地图、路况、POI等）",
         kb_name=None,
         category="realtime",
     ),

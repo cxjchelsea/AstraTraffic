@@ -4,6 +4,7 @@
 职责：处理无文档时的fallback逻辑和友好答复生成
 """
 from typing import Optional
+from langchain_core.documents import Document
 from modules.rag_types.rag_types import IntentResult
 from modules.config.tool_config import get_kb_intent_labels
 
@@ -87,6 +88,42 @@ def check_has_realtime_info(context: str) -> bool:
     Returns:
         bool: 是否有实时信息
     """
-    # 支持未来扩展其他实时工具（如实时公交、实时天气等）
-    return "【实时路况信息】" in context or "【实时" in context
+    # 支持所有实时工具（路况、地图、公交、天气等）
+    return (
+        "【实时路况信息】" in context 
+        or "【地图查看】" in context
+        or "【实时" in context
+    )
+
+
+def extractive_fallback(documents: list[Document], max_sents: int = 5) -> str:
+    """
+    抽取式兜底（LLM调用失败但有文档时使用）
+    
+    当LLM调用失败时，从已有文档中抽取句子组成答案
+    
+    Args:
+        documents: 检索到的文档列表
+        max_sents: 最多抽取的句子数
+    
+    Returns:
+        str: 抽取式答案
+    """
+    import re
+    
+    def split(text: str) -> list[str]:
+        return [s for s in re.split(r"[。！？!?；;]\s*", (text or "")) if s]
+    
+    sents = []
+    for doc in documents:
+        sents += split(doc.page_content)
+        if len(sents) >= max_sents:
+            break
+    
+    if not sents:
+        return "根据现有资料无法给出确定答案。"
+    
+    body = "；".join(sents[:max_sents]) + "。"
+    refs = "参考：" + "".join(f"[S{i+1}]" for i in range(len(documents))) if documents else ""
+    return body + ("\n\n" + refs if refs else "")
 

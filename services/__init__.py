@@ -7,8 +7,7 @@
 - quality: 质量检查
 - fallback: 回退逻辑
 - input_handler: 输入处理
-- realtime_handler: 实时数据处理
-- realtime_tool: 实时工具执行
+- realtime: 实时工具（客户端管理、数据获取、工具执行）
 """
 from services.tool_selector import (
     ToolSelector,
@@ -24,14 +23,14 @@ from services.fallback import (
     check_has_realtime_info,
 )
 from services.input_handler import get_history_manager
-from modules.chat.history import ChatHistoryManager
-from services.realtime_handler import (
+from services.realtime import (
     get_traffic_client,
     get_road_traffic,
     format_traffic_info,
     extract_road_name_from_query,
-)
-from services.realtime_tool import (
+    get_location_map,
+    extract_location_from_query,
+    format_map_info_to_dict,
     RealtimeToolExecutor,
     RealtimeToolResult,
     get_realtime_executor,
@@ -49,11 +48,13 @@ __all__ = [
     "should_fallback",
     "check_has_realtime_info",
     "get_history_manager",
-    "ChatHistoryManager",
     "get_traffic_client",
     "get_road_traffic",
     "format_traffic_info",
     "extract_road_name_from_query",
+    "get_location_map",
+    "extract_location_from_query",
+    "format_map_info_to_dict",
     "RealtimeToolExecutor",
     "RealtimeToolResult",
     "get_realtime_executor",

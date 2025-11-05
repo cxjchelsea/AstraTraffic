@@ -2,6 +2,25 @@
 
 基于 LangChain 架构的智慧交通 RAG 系统
 
+> 个人出行管家：从知识问答到出行规划，用 AI 重新定义个人交通出行体验
+
+---
+
+## 📋 项目进展概览
+
+### ✅ 已实现功能
+
+- **🧠 智能决策**：基于 LLM 的智能工具选择，自动路由到知识库或实时工具
+- **📚 知识检索增强**：混合检索系统（FAISS + BM25），多知识库支持，引用溯源
+- **📡 实时数据**：实时路况查询，智能信息提取，可扩展的实时工具框架
+- **🗺️ 实时地图**：交互式地图可视化，地图标记与控制，前后端数据联动
+- **💬 多轮对话**：对话历史管理，上下文理解，连续对话支持
+
+### 🚀 下一步规划
+
+- **🗺️ 路径规划**：多路径方案生成，实时路况优化，多交通方式支持，个性化推荐
+- **📊 出行预测**：出行时间预测，拥堵预测，天气影响分析，主动建议生成
+
 ---
 
 ## 📁 根目录文件
@@ -68,27 +87,32 @@ services/
 ├── tool_selector.py        # 工具选择业务逻辑
 │                           # - ToolSelector: 工具选择器类
 │                           # - select_tool(): 基于 LLM 选择工具
+│                           # - 智能路由：根据用户查询自动选择知识库或实时工具
 │
 ├── quality.py              # 质量检查业务逻辑
 │                           # - check_hits_quality(): 判断检索结果质量
+│                           # - 基于置信度阈值筛选检索结果
 │
 ├── fallback.py             # 回退业务逻辑
 │                           # - get_no_document_response(): 无文档时的友好答复
 │                           # - should_fallback(): 判断是否回退
 │                           # - check_has_realtime_info(): 检查是否有实时信息
+│                           # - extractive_fallback(): 抽取式兜底（LLM 失败时）
 │
-├── realtime_tool.py        # 实时工具执行业务逻辑
+├── realtime.py             # 实时工具业务逻辑（已合并）
 │                           # - RealtimeToolExecutor: 实时工具执行器
 │                           # - execute_realtime_tool(): 执行实时工具
-│
-├── realtime_handler.py     # 实时数据处理业务逻辑
 │                           # - get_traffic_client(): 获取实时路况客户端
 │                           # - get_road_traffic(): 查询道路实时路况
+│                           # - get_location_map(): 查询地图位置信息
 │                           # - format_traffic_info(): 格式化路况信息
+│                           # - format_map_info_to_dict(): 格式化地图信息
 │                           # - extract_road_name_from_query(): 从查询中提取道路名称
+│                           # - extract_location_from_query(): 从查询中提取位置信息
 │
 └── input_handler.py        # 输入处理业务逻辑
                             # - get_history_manager(): 获取历史管理器
+                            # - 提供统一的输入处理接口
 ```
 
 ---
@@ -170,50 +194,40 @@ modules/chat/
 
 ```
 modules/retriever/
-├── rag_retriever.py         # RAG 检索核心实现
-│                           # - DenseEncoder: 稠密向量编码（SentenceTransformer）
-│                           # - KnowledgeSearcher: 混合检索（FAISS + BM25 + 重排序）
-│                           # - KBIngestor: 知识库入库工具
-│
-└── ingest_kb.py            # 知识库入库脚本（CLI 工具）
-                            # 用法: python ingest_kb.py --ingest <知识库路径> --kb_name <库名>
+└── rag_retriever.py         # RAG 检索核心实现
+                            # - DenseEncoder: 稠密向量编码（SentenceTransformer）
+                            # - KnowledgeSearcher: 混合检索（FAISS + BM25 + 重排序）
+                            # - KBIngestor: 知识库入库工具
+                            #
+                            # 注意：知识库入库脚本已移至 scripts/ingest_kb.py
 ```
 
-### modules/realtime/ - 实时API模块
+### modules/realtime/ - 实时数据模块
 
 ```
 modules/realtime/
 ├── __init__.py             # 包初始化
-└── traffic_api.py          # 实时路况API封装
-                            # - AmapTrafficAPI: 高德地图路况API客户端
-                            # - TrafficInfo: 路况信息数据类
+├── traffic.py              # 实时路况模块
+│                           # - AmapTrafficAPI: 高德地图路况API客户端
+│                           # - TrafficInfo: 路况信息数据类
+└── map.py                  # 实时地图模块
+                            # - AmapMapAPI: 高德地图地图API客户端
+                            # - MapInfo, MapLocation: 地图信息数据类
+                            # - get_map_client(): 获取地图客户端实例
 ```
 
-### modules/intent/ - 意图识别模块（已废弃，保留训练代码）
+**功能说明**：
+- **实时路况查询**：集成高德地图实时路况 API，支持道路拥堵、限行等实时信息
+- **地图数据获取**：支持地点搜索、坐标转换、地图信息格式化
+- **可扩展设计**：预留接口，支持未来扩展更多实时数据源（天气、公交等）
 
-```
-modules/intent/
-├── intent_classify.py      # 意图分类核心实现（已废弃，保留用于训练）
-│
-└── model_training/         # 意图模型训练相关
-    ├── train/              # 训练脚本
-    │   ├── train_intent_lora.py          # 单任务意图模型训练
-    │   ├── train_intent_lora_multitask.py # 多任务意图模型训练
-    │   ├── infer_intent_lora.py          # 单任务推理脚本
-    │   ├── infer_intent_lora_multitask.py # 多任务推理脚本
-    │   └── ...
-    │
-    ├── data/               # 训练数据处理
-    │   ├── intent/         # 意图识别数据集（train/dev/test）
-    │   ├── label_data/     # 原始标注数据
-    │   └── ...
-    │
-    └── models/             # 训练好的模型（本地）
-        ├── bert-base-chinese/            # 基础 BERT 模型
-        └── bert-intent-lora-v1/          # LoRA 微调后的意图模型
-```
+### modules/intent/ - 意图识别模块（已废弃）
 
-**注意**：意图识别功能已废弃，系统现在使用 LLM 提示词进行工具选择。此目录保留用于训练代码参考。
+**注意**：意图识别模块已移至 `archive/intent_classification/`。
+
+系统现在使用 LLM 提示词进行工具选择，不再需要训练专门的意图分类模型。
+
+如需查看原始训练代码和模型，请参考 `archive/intent_classification/` 目录。
 
 ---
 
@@ -253,7 +267,7 @@ data/storage/
 │   └── bm25_tokens.json     # BM25 分词索引
 ```
 
-**注意**：这些索引文件由 `modules/retriever/ingest_kb.py` 生成
+**注意**：这些索引文件由 `scripts/ingest_kb.py` 生成
 
 ---
 
@@ -261,10 +275,101 @@ data/storage/
 
 ```
 scripts/
-└── cli.py                    # 命令行交互工具
-                              # 用法: python scripts/cli.py
-                              # 提供交互式问答界面
+├── cli.py                    # 命令行交互工具
+│                             # 用法: python scripts/cli.py
+│                             # 提供交互式问答界面，显示详细调试信息
+│                             # 适合开发调试和服务器环境使用
+│
+├── ingest_kb.py              # 知识库入库脚本
+│                             # 用法: python scripts/ingest_kb.py --root data/knowledge --include law,parking
+│                             # 生成 FAISS 索引、BM25 索引和元数据文件
+│
+└── test_deps.py              # 依赖检查工具
+                              # 用法: python scripts/test_deps.py
+                              # 检查 Python 依赖包是否正确安装
 ```
+
+---
+
+## 🌐 api/ - API 服务层
+
+FastAPI 后端服务，提供 RESTful API 接口
+
+```
+api/
+├── __init__.py              # 包初始化
+├── main.py                  # FastAPI 主应用
+│                           # - /api/chat: 聊天接口（支持多轮对话）
+│                           # - 请求/响应模型定义
+│                           # - 错误处理和日志记录
+│
+└── run_server.py            # 服务器启动脚本
+                            # - 使用 Uvicorn 启动 FastAPI 服务
+                            # - 默认端口: 8000
+                            # - 支持热重载（开发模式）
+```
+
+**功能说明**：
+- **聊天接口**：接收用户消息，调用 RAG 系统，返回答案和地图数据
+- **数据格式**：支持 JSON 格式的请求和响应
+- **地图数据**：返回地图相关信息（位置、坐标等）供前端可视化
+
+---
+
+## 🎨 frontend/ - 前端界面
+
+Vue 3 + Vite 构建的现代化 Web 界面
+
+```
+frontend/
+├── src/
+│   ├── api/
+│   │   └── chat.js          # API 客户端（Axios）
+│   │
+│   ├── components/
+│   │   ├── ChatPanel.vue    # 聊天面板组件
+│   │   └── MapPanel.vue     # 地图面板组件
+│   │
+│   ├── config/
+│   │   └── amap.js          # 高德地图配置
+│   │
+│   ├── App.vue              # 主应用组件
+│   ├── main.js              # 应用入口
+│   └── style.css            # 全局样式
+│
+├── index.html               # HTML 入口
+├── package.json             # 前端依赖配置
+└── vite.config.js           # Vite 构建配置
+```
+
+**功能说明**：
+- **聊天界面**：支持发送消息、显示对话历史、加载状态等
+- **地图可视化**：基于高德地图 JavaScript API，实时显示地图和标记
+- **数据联动**：后端返回地图数据时，前端自动渲染地图
+- **响应式设计**：适配不同屏幕尺寸
+
+---
+
+## 📦 archive/ - 归档目录
+
+存放已废弃但保留作为参考的代码和资源。
+
+```
+archive/
+├── README.md                 # 归档说明文档
+├── .gitignore                # 忽略大文件（模型、数据等）
+└── intent_classification/    # 意图识别模块（已废弃）
+    ├── intent_classify.py    # 意图分类核心实现
+    └── model_training/        # 训练相关代码和数据
+        ├── train/            # 训练脚本
+        ├── data/             # 训练数据
+        └── models/           # 训练好的模型
+```
+
+**注意**：
+- 此目录中的代码不会被系统使用
+- 模型文件较大，已通过 `.gitignore` 配置忽略
+- 如需使用，请参考 `archive/README.md`
 
 ---
 
@@ -363,8 +468,7 @@ cp .env.example .env  # 如果有示例文件
 
 ```bash
 # 入库知识库（示例）
-python modules/retriever/ingest_kb.py --ingest data/knowledge/law --kb_name law
-python modules/retriever/ingest_kb.py --ingest data/knowledge/parking --kb_name parking
+python scripts/ingest_kb.py --root data/knowledge --include law,parking
 ```
 
 ### 3. 运行应用
@@ -389,7 +493,7 @@ python scripts/cli.py
 
 ## 📌 注意事项
 
-1. **模型文件**: `data/models/` 和 `modules/intent/model_training/models/` 中的模型文件通常较大，建议使用 Git LFS 或单独下载
+1. **模型文件**: `data/models/` 和 `archive/intent_classification/model_training/models/` 中的模型文件通常较大，建议使用 Git LFS 或单独下载
 2. **索引文件**: `data/storage/` 中的索引文件由入库脚本自动生成，首次使用需要先运行入库
 3. **环境变量**: `.env` 文件包含敏感信息，不要提交到版本控制
 4. **依赖版本**: 建议严格按照 `requirements.txt` 中的版本安装，避免兼容性问题
