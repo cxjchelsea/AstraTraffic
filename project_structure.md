@@ -37,6 +37,8 @@
 
 核心 RAG 流程编排，使用 LangChain LCEL 构建
 
+**业务层归属**：编排层（协调五层协作）
+
 ```
 core/
 ├── __init__.py              # 包初始化
@@ -45,6 +47,7 @@ core/
                             # - create_rag_chain_with_history(): 多轮对话链
                             # - rag_answer_langchain(): 单轮问答接口
                             # - rag_answer_with_history(): 多轮对话接口
+                            # [业务层：编排层 - 协调感知、理解、决策、执行各层协作]
 ```
 
 ---
@@ -59,6 +62,7 @@ adapters/
 ├── retriever.py            # 检索适配器
 │                           # - CustomRetriever: 基础检索适配器
 │                           # - ToolAwareRetriever: 工具感知检索适配器
+│                           # [业务层：L4 执行层 - 知识检索执行器]
 │
 ├── llm.py                  # LLM 适配器
 │                           # - CustomLLM: 自定义 LLM 包装器
@@ -72,6 +76,7 @@ adapters/
 │
 └── query_rewriter.py        # 查询改写适配器
                             # - rewrite_query_with_history(): 基于历史改写查询
+                            # [业务层：L2 理解层 - 语义理解与查询改写]
 ```
 
 ---
@@ -88,16 +93,19 @@ services/
 │                           # - ToolSelector: 工具选择器类
 │                           # - select_tool(): 基于 LLM 选择工具
 │                           # - 智能路由：根据用户查询自动选择知识库或实时工具
+│                           # [业务层：L3 决策层 - 工具选择决策（轻量级）]
 │
 ├── quality.py              # 质量检查业务逻辑
 │                           # - check_hits_quality(): 判断检索结果质量
 │                           # - 基于置信度阈值筛选检索结果
+│                           # [业务层：L3 决策层 - 质量评估]
 │
 ├── fallback.py             # 回退业务逻辑
 │                           # - get_no_document_response(): 无文档时的友好答复
 │                           # - should_fallback(): 判断是否回退
 │                           # - check_has_realtime_info(): 检查是否有实时信息
 │                           # - extractive_fallback(): 抽取式兜底（LLM 失败时）
+│                           # [业务层：L3 决策层 - 回退策略]
 │
 ├── realtime.py             # 实时工具业务逻辑（已合并）
 │                           # - RealtimeToolExecutor: 实时工具执行器
@@ -109,6 +117,7 @@ services/
 │                           # - format_map_info_to_dict(): 格式化地图信息
 │                           # - extract_road_name_from_query(): 从查询中提取道路名称
 │                           # - extract_location_from_query(): 从查询中提取位置信息
+│                           # [业务层：L1 感知层（被动感知）+ L4 执行层]
 │
 └── input_handler.py        # 输入处理业务逻辑
                             # - get_history_manager(): 获取历史管理器
@@ -157,6 +166,8 @@ modules/rag_types/
 
 ### modules/generator/ - 生成器模块
 
+**业务层归属**：L2 理解层
+
 ```
 modules/generator/
 ├── prompt.py               # Prompt 模板（底层实现，不依赖 LangChain）
@@ -168,6 +179,7 @@ modules/generator/
 │                           # - format_chat_history(): 格式化对话历史
 │                           # - build_tool_selection_prompt(): 构建工具选择提示词
 │                           # - build_road_name_extraction_prompt(): 构建道路名称提取提示词
+│                           # [业务层：L2 理解层 - Prompt 生成与语义理解]
 │
 ├── messages.py             # 用户消息模板（输出给用户的内容）
 │                           # - get_realtime_traffic_prefix(): 实时路况信息前缀
@@ -177,9 +189,12 @@ modules/generator/
 │
 └── query_rewriter.py       # 查询改写模块（使用LLM）
                             # - rewrite_query_with_history(): 基于对话历史改写查询
+                            # [业务层：L2 理解层 - 语义理解与查询改写]
 ```
 
 ### modules/chat/ - 对话管理
+
+**业务层归属**：L2 理解层
 
 ```
 modules/chat/
@@ -188,9 +203,12 @@ modules/chat/
                             # - ChatHistoryManager: 对话历史管理器类
                             # - get_history_manager(): 获取全局历史管理器实例
                             # - 线程安全的会话管理
+                            # [业务层：L2 理解层 - 上下文记忆管理]
 ```
 
 ### modules/retriever/ - 检索模块
+
+**业务层归属**：L4 执行层
 
 ```
 modules/retriever/
@@ -198,11 +216,14 @@ modules/retriever/
                             # - DenseEncoder: 稠密向量编码（SentenceTransformer）
                             # - KnowledgeSearcher: 混合检索（FAISS + BM25 + 重排序）
                             # - KBIngestor: 知识库入库工具
+                            # [业务层：L4 执行层 - 知识检索实现]
                             #
                             # 注意：知识库入库脚本已移至 scripts/ingest_kb.py
 ```
 
 ### modules/realtime/ - 实时数据模块
+
+**业务层归属**：L1 感知层（被动感知）
 
 ```
 modules/realtime/
@@ -210,16 +231,20 @@ modules/realtime/
 ├── traffic.py              # 实时路况模块
 │                           # - AmapTrafficAPI: 高德地图路况API客户端
 │                           # - TrafficInfo: 路况信息数据类
+│                           # [业务层：L1 感知层 - 实时数据获取]
 └── map.py                  # 实时地图模块
                             # - AmapMapAPI: 高德地图地图API客户端
                             # - MapInfo, MapLocation: 地图信息数据类
                             # - get_map_client(): 获取地图客户端实例
+                            # [业务层：L1 感知层 - 地图数据获取]
 ```
 
 **功能说明**：
 - **实时路况查询**：集成高德地图实时路况 API，支持道路拥堵、限行等实时信息
 - **地图数据获取**：支持地点搜索、坐标转换、地图信息格式化
 - **可扩展设计**：预留接口，支持未来扩展更多实时数据源（天气、公交等）
+- **当前模式**：被动感知（按需调用 API）
+- **未来增强**：持续监控、事件检测、主动触发
 
 ### modules/intent/ - 意图识别模块（已废弃）
 
@@ -374,6 +399,35 @@ archive/
 ---
 
 ## 📋 架构说明
+
+> **提示**：详细的架构映射说明请参考 [ARCHITECTURE.md](docs/ARCHITECTURE_MAPPING.md)
+
+### 架构映射关系
+
+当前系统采用**技术架构 + 业务架构映射**的设计方式：
+
+- **技术架构**：按代码组织方式划分（`core/`、`adapters/`、`services/`、`modules/`）
+- **业务架构**：按智能体能力划分（感知层、理解层、决策层、执行层、反思层）
+
+#### 五层业务架构映射
+
+根据新构想文档（`astratraffic-new.md`），系统应具备五大智能层：
+
+| 业务层 | 技术模块映射 | 实现状态 | 说明 |
+|--------|-------------|---------|------|
+| **L1 感知层** | `services/realtime.py`<br>`modules/realtime/` | ⭐⭐⭐ | 实时数据获取（被动感知） |
+| **L2 理解层** | `adapters/query_rewriter.py`<br>`modules/generator/`<br>`modules/chat/` | ⭐⭐⭐⭐ | 意图识别、查询改写、上下文管理 |
+| **L3 决策层** | `services/tool_selector.py`<br>`services/quality.py`<br>`services/fallback.py` | ⭐⭐⭐ | 工具选择决策（轻量级） |
+| **L4 执行层** | `adapters/retriever.py`<br>`modules/retriever/`<br>`services/realtime.py` | ⭐⭐⭐⭐ | 知识检索、实时工具执行 |
+| **L5 反思层** | ❌ 未实现 | ⭐ | 暂无学习机制 |
+
+**当前模式**：被动响应式（用户查询 → 系统响应）
+
+**未来演进**：主动自主式（持续感知 → 主动决策 → 自主行动）
+
+详细说明请参考 [ARCHITECTURE.md](docs/ARCHITECTURE_MAPPING.md)
+
+---
 
 ### 分层设计
 

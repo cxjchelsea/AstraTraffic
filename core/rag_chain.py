@@ -2,6 +2,16 @@
 """
 核心 RAG Chain 编排
 使用 LangChain 的 LCEL (LangChain Expression Language) 构建 RAG 流程
+
+业务层归属：编排层（协调五层协作）
+- 协调感知层（L1）：调用实时数据获取
+- 协调理解层（L2）：调用查询改写、上下文理解
+- 协调决策层（L3）：调用工具选择、质量评估
+- 协调执行层（L4）：调用知识检索、工具执行
+- 未来：协调反思层（L5）：学习与优化
+
+当前模式：被动响应式（用户查询触发）
+未来演进：主动自主式（持续感知 → 主动决策 → 自主行动）
 """
 from typing import Optional, Dict, Any, Callable
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -227,7 +237,7 @@ def _build_format_docs_fn() -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         # 使用实时工具执行器统一处理实时API工具（跳过none工具）
         tool_selection = inputs.get("tool_selection")
         realtime_result = None
-        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
+        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map", "route_planning"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -271,7 +281,7 @@ def _build_format_docs_with_history_fn() -> Callable[[Dict[str, Any]], Dict[str,
         # 使用实时工具执行器统一处理实时API工具（跳过none工具）
         tool_selection = inputs.get("tool_selection")
         realtime_result = None
-        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map"]:
+        if tool_selection and tool_selection.tool not in ["none"] and tool_selection.tool in ["realtime_traffic", "realtime_map", "route_planning"]:
             realtime_result = execute_realtime_tool(tool_selection, query)
             if realtime_result:
                 context = realtime_result.context_text + ("\n\n" + context if context else "")
@@ -396,11 +406,13 @@ def _build_generate_answer_fn(
         # 获取 KB 名称
         kb = documents[0].metadata.get("kb_name") if documents else None
         
-        # 提取地图数据（如果存在）
+        # 提取地图数据或路径数据（如果存在）
         map_data = None
+        route_data = None
         realtime_result = inputs.get("realtime_result")
         if realtime_result and realtime_result.metadata:
             map_data = realtime_result.metadata.get("map_data")
+            route_data = realtime_result.metadata.get("route_data")
         
         result = {
             "query": query,
@@ -412,9 +424,11 @@ def _build_generate_answer_fn(
             "quality_ok": True,
         }
         
-        # 添加地图数据到结果中（将在后续构建Metrics时使用）
+        # 添加地图数据或路径数据到结果中（将在后续构建Metrics时使用）
         if map_data:
             result["map_data"] = map_data
+        if route_data:
+            result["route_data"] = route_data
         
         if with_history:
             result["rewritten_query"] = inputs.get("rewritten_query", query)
@@ -686,10 +700,13 @@ def rag_answer_with_history(
         "rewritten_query": rewritten_query if rewritten_query != query else None,
     }
     
-    # 添加地图数据（如果存在）
+    # 添加地图数据或路径数据（如果存在）
     map_data = result.get("map_data")
+    route_data = result.get("route_data")
     if map_data:
         notes["map_data"] = map_data
+    if route_data:
+        notes["route_data"] = route_data
     
     metrics = Metrics(
         used_kb=result.get("kb"),

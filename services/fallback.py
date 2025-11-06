@@ -88,10 +88,11 @@ def check_has_realtime_info(context: str) -> bool:
     Returns:
         bool: 是否有实时信息
     """
-    # 支持所有实时工具（路况、地图、公交、天气等）
+    # 支持所有实时工具（路况、地图、路径规划、公交、天气等）
     return (
         "【实时路况信息】" in context 
         or "【地图查看】" in context
+        or "【路径规划】" in context
         or "【实时" in context
     )
 

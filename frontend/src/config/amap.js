@@ -28,6 +28,7 @@ export const AMAP_PLUGINS = [
   'AMap.Scale',
   'AMap.Geolocation',
   'AMap.Marker',
-  'AMap.InfoWindow'
+  'AMap.InfoWindow',
+  'AMap.GeometryUtil'  // 用于解码polyline
 ]
 

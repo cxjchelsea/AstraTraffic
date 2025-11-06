@@ -54,6 +54,19 @@ class MapDataResponse(BaseModel):
     bounds: Optional[Dict[str, Dict[str, float]]] = None  # 边界范围 {northeast: {lng, lat}, southwest: {lng, lat}}
 
 
+class RouteDataResponse(BaseModel):
+    """路径数据响应模型"""
+    origin: Dict[str, float]  # {lng: float, lat: float}
+    destination: Dict[str, float]  # {lng: float, lat: float}
+    distance: float  # 总距离（米）
+    duration: float  # 总耗时（秒）
+    strategy: str  # 路径策略
+    tolls: float  # 过路费（元）
+    toll_distance: float  # 收费路段距离（米）
+    polyline: str  # 完整路径坐标串
+    steps: List[Dict[str, Any]]  # 路径步骤列表
+
+
 class ChatResponse(BaseModel):
     """聊天响应模型"""
     answer: str
@@ -62,6 +75,7 @@ class ChatResponse(BaseModel):
     kb: Optional[str] = None
     hits: List[HitResponse] = []
     map_data: Optional[MapDataResponse] = None
+    route_data: Optional[RouteDataResponse] = None
     metrics: Dict[str, Any] = {}
 
 
@@ -107,8 +121,24 @@ async def chat(request: ChatRequest):
                     print(f"[API] 成功提取地图数据: {map_data_raw}")
                 except Exception as e:
                     print(f"[API ERROR] 地图数据格式错误: {e}, 原始数据: {map_data_raw}")
-        else:
-            print(f"[API] metrics.notes中没有map_data, notes内容: {pack.metrics.notes}")
+        
+        # 提取路径数据（如果存在）
+        route_data = None
+        if pack.metrics.notes and "route_data" in pack.metrics.notes:
+            route_data_raw = pack.metrics.notes["route_data"]
+            if route_data_raw:
+                try:
+                    # 打印原始数据以便调试
+                    print(f"[API] 原始路径数据: {route_data_raw}")
+                    print(f"[API] 路径数据类型: {type(route_data_raw)}")
+                    print(f"[API] 路径数据键: {route_data_raw.keys() if isinstance(route_data_raw, dict) else 'N/A'}")
+                    
+                    route_data = RouteDataResponse(**route_data_raw)
+                    print(f"[API] 成功提取路径数据: origin={route_data.origin}, destination={route_data.destination}, polyline长度={len(route_data.polyline) if route_data.polyline else 0}")
+                except Exception as e:
+                    print(f"[API ERROR] 路径数据格式错误: {e}, 原始数据: {route_data_raw}")
+                    import traceback
+                    traceback.print_exc()
         
         # 构建响应
         response = ChatResponse(
@@ -127,12 +157,13 @@ async def chat(request: ChatRequest):
                 for h in pack.hits
             ],
             map_data=map_data,
+            route_data=route_data,
             metrics={
                 "used_kb": pack.metrics.used_kb,
                 "intent_conf": pack.metrics.intent_conf,
                 "conf_th": pack.metrics.conf_th,
                 "notes": {k: v for k, v in (pack.metrics.notes or {}).items() 
-                         if k != "map_data"}  # 排除map_data，已单独提取
+                         if k not in ["map_data", "route_data"]}  # 排除map_data和route_data，已单独提取
             }
         )
         

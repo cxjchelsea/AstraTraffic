@@ -6,6 +6,15 @@
 - 客户端管理（单例模式）
 - 数据获取和格式化
 - 工具执行器
+
+业务层归属：L1 感知层（被动感知）+ L4 执行层
+- L1 感知层：实时数据获取（路况、地图）
+  - 当前模式：被动感知（按需查询API）
+  - 未来增强：持续监控、事件检测、主动触发
+- L4 执行层：实时工具执行器
+  - 执行实时API调用
+  - 数据格式化与处理
+  - 动作监控与容错
 """
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
@@ -294,6 +303,7 @@ class RealtimeToolExecutor:
         self._tool_handlers = {
             "realtime_traffic": self._handle_traffic_tool,
             "realtime_map": self._handle_map_tool,
+            "route_planning": self._handle_planning_tool,
         }
     
     def execute_tool(
@@ -454,6 +464,45 @@ class RealtimeToolExecutor:
                     "city": default_city,
                     "reason": "api_failed"
                 }
+            )
+    
+    def _handle_planning_tool(
+        self,
+        query: str,
+        tool_selection: ToolSelection,
+        city: Optional[str] = None,
+        **kwargs
+    ) -> RealtimeToolResult:
+        """
+        处理路径规划工具
+        
+        Args:
+            query: 用户查询
+            tool_selection: Tool选择结果
+            city: 城市名称（可选，默认使用配置中的城市）
+        
+        Returns:
+            RealtimeToolResult对象，包含路径数据和上下文文本
+        """
+        from services.planning import execute_planning_tool
+        
+        default_city = city or AMAP_DEFAULT_CITY
+        
+        # 调用路径规划执行器
+        planning_result = execute_planning_tool(tool_selection, query, city=default_city)
+        
+        if planning_result:
+            # 将PlanningToolResult转换为RealtimeToolResult格式
+            return RealtimeToolResult(
+                success=planning_result.success,
+                context_text=planning_result.context_text,
+                metadata=planning_result.metadata,
+            )
+        else:
+            return RealtimeToolResult(
+                success=False,
+                context_text="【路径规划】\n路径规划服务暂时不可用。",
+                metadata={"reason": "executor_failed"}
             )
 
 

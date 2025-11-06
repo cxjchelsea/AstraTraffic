@@ -1,7 +1,7 @@
 <template>
   <div class="map-panel">
     <div class="map-header">
-      <h3>{{ mapData.location_name || '地图' }}</h3>
+      <h3>{{ getHeaderTitle() }}</h3>
       <button @click="$emit('close-map')" class="close-button">×</button>
     </div>
     <div class="map-container" ref="mapContainer"></div>
@@ -25,6 +25,7 @@ const mapContainer = ref(null)
 let mapInstance = null
 let markers = []
 let trafficLayer = null  // 路况图层实例
+let routePolyline = null  // 路径折线实例
 
 onMounted(() => {
   nextTick(() => {
@@ -53,8 +54,8 @@ const initMap = async () => {
       return
     }
     
-    // 检查地图数据
-    if (!props.mapData || !props.mapData.location) {
+    // 检查地图数据（支持路径数据或地图数据）
+    if (!props.mapData || (!props.mapData.location && !props.mapData.route_data)) {
       console.warn('[MapPanel] 地图数据不完整:', props.mapData)
       showError('地图数据不完整')
       return
@@ -71,10 +72,23 @@ const initMap = async () => {
       plugins: AMAP_PLUGINS
     })
     
-    // 创建地图实例（先设置默认中心点和缩放级别）
+    // 确定初始中心点和缩放级别
+    let initialCenter = [116.397428, 39.90923]  // 默认北京天安门
+    let initialZoom = 15
+    
+    if (props.mapData.route_data) {
+      // 如果有路径数据，使用起点作为中心
+      initialCenter = [props.mapData.route_data.origin.lng, props.mapData.route_data.origin.lat]
+    } else if (props.mapData.location) {
+      // 如果有地图数据，使用地图位置
+      initialCenter = [props.mapData.location.lng, props.mapData.location.lat]
+      initialZoom = props.mapData.zoom || 15
+    }
+    
+    // 创建地图实例
     mapInstance = new AMap.Map(mapContainer.value, {
-      zoom: props.mapData.zoom || 15,
-      center: [props.mapData.location.lng, props.mapData.location.lat],
+      zoom: initialZoom,
+      center: initialCenter,
       viewMode: '3D',
       mapStyle: 'amap://styles/normal'  // 标准地图样式
     })
@@ -89,6 +103,11 @@ const initMap = async () => {
     
     // 添加标记点
     addMarkers(props.mapData.markers || [])
+    
+    // 如果有路径数据，绘制路径
+    if (props.mapData.route_data) {
+      drawRoute(props.mapData.route_data)
+    }
     
     // 如果显示路况
     if (props.mapData.show_traffic) {
@@ -114,7 +133,10 @@ const initMap = async () => {
       if (import.meta.env.DEV) {
         console.log('[MapPanel] 使用边界自动调整视野:', bounds)
       }
-    } else if (props.mapData.zoom) {
+    } else if (props.mapData.route_data) {
+      // 如果有路径数据，调整视野以包含整个路径（在drawRoute中处理）
+      // 这里不需要额外操作
+    } else if (props.mapData.zoom && props.mapData.location) {
       // 如果没有边界，使用指定的缩放级别
       mapInstance.setZoom(props.mapData.zoom)
       mapInstance.setCenter([props.mapData.location.lng, props.mapData.location.lat])
@@ -181,6 +203,15 @@ const clearMarkers = () => {
     marker.setMap(null)
   })
   markers = []
+  // 同时清除路径
+  clearRoute()
+}
+
+const getHeaderTitle = () => {
+  if (props.mapData?.route_data) {
+    return '路径规划'
+  }
+  return props.mapData?.location_name || '地图'
 }
 
 const showError = (message) => {
@@ -250,6 +281,146 @@ const updateMap = () => {
   
   // 更新标记点
   addMarkers(props.mapData.markers || [])
+  
+  // 如果有路径数据，绘制路径
+  if (props.mapData.route_data) {
+    drawRoute(props.mapData.route_data)
+  }
+}
+
+const drawRoute = (routeData) => {
+  // 清除旧路径
+  clearRoute()
+  
+  if (import.meta.env.DEV) {
+    console.log('[MapPanel] drawRoute 被调用，routeData:', routeData)
+    console.log('[MapPanel] routeData 类型:', typeof routeData)
+    console.log('[MapPanel] routeData 键:', routeData ? Object.keys(routeData) : 'N/A')
+    console.log('[MapPanel] mapInstance:', !!mapInstance)
+    console.log('[MapPanel] routeData.polyline:', routeData?.polyline)
+    console.log('[MapPanel] routeData.origin:', routeData?.origin)
+    console.log('[MapPanel] routeData.destination:', routeData?.destination)
+  }
+  
+  if (!mapInstance || !routeData || !routeData.polyline) {
+    if (import.meta.env.DEV) {
+      console.warn('[MapPanel] 无法绘制路径: 缺少必要数据', { 
+        mapInstance: !!mapInstance, 
+        routeData: routeData,
+        hasPolyline: !!routeData?.polyline,
+        polyline: routeData?.polyline,
+        routeDataKeys: routeData ? Object.keys(routeData) : []
+      })
+    }
+    return
+  }
+  
+  try {
+    if (import.meta.env.DEV) {
+      console.log('[MapPanel] 开始绘制路径:', { 
+        origin: routeData.origin, 
+        destination: routeData.destination,
+        polylineLength: routeData.polyline?.length,
+        polylinePreview: routeData.polyline?.substring(0, 100)
+      })
+    }
+    
+    // 解析路径坐标串（高德地图格式：经度,纬度;经度,纬度;...）
+    // 注意：高德API返回的polyline可能是编码后的，需要先解码
+    let polylineStr = routeData.polyline
+    
+    // 检查是否是编码格式（编码后的字符串通常不包含分号）
+    if (!polylineStr.includes(';') && !polylineStr.includes(',')) {
+      // 可能是编码格式，需要解码（使用高德地图JS API的解码方法）
+      if (window.AMap && window.AMap.GeometryUtil) {
+        // 使用高德地图JS API的解码方法
+        const decoded = window.AMap.GeometryUtil.decodeLine(polylineStr)
+        if (decoded && decoded.length > 0) {
+          const path = decoded.map(point => [point.lng, point.lat])
+          _drawPolylineWithMarkers(path, routeData)
+          return
+        }
+      }
+      console.error('[MapPanel] polyline格式异常，无法解析:', polylineStr.substring(0, 50))
+      return
+    }
+    
+    // 未编码格式：直接解析
+    const path = polylineStr.split(';').map(point => {
+      const [lng, lat] = point.split(',')
+      return [parseFloat(lng), parseFloat(lat)]
+    }).filter(point => !isNaN(point[0]) && !isNaN(point[1]))
+    
+    if (path.length === 0) {
+      console.error('[MapPanel] 解析后的路径点为空')
+      return
+    }
+    
+    _drawPolylineWithMarkers(path, routeData)
+    
+  } catch (error) {
+    console.error('[MapPanel] 绘制路径失败:', error, routeData)
+  }
+}
+
+const _drawPolylineWithMarkers = (path, routeData) => {
+  // 创建路径折线
+  routePolyline = new AMap.Polyline({
+    path: path,
+    isOutline: true,
+    outlineColor: '#ffeeff',
+    borderWeight: 3,
+    strokeColor: '#3366FF',
+    strokeOpacity: 1,
+    strokeWeight: 6,
+    lineJoin: 'round',
+    lineCap: 'round',
+    zIndex: 50,
+    map: mapInstance
+  })
+  
+  // 添加起点和终点标记
+  if (routeData.origin && routeData.origin.lng && routeData.origin.lat) {
+    const originMarker = new AMap.Marker({
+      position: [routeData.origin.lng, routeData.origin.lat],
+      icon: new AMap.Icon({
+        size: new AMap.Size(32, 32),
+        image: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png',
+        imageSize: new AMap.Size(32, 32)
+      }),
+      map: mapInstance
+    })
+    markers.push(originMarker)
+  }
+  
+  if (routeData.destination && routeData.destination.lng && routeData.destination.lat) {
+    const destMarker = new AMap.Marker({
+      position: [routeData.destination.lng, routeData.destination.lat],
+      icon: new AMap.Icon({
+        size: new AMap.Size(32, 32),
+        image: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png',
+        imageSize: new AMap.Size(32, 32)
+      }),
+      map: mapInstance
+    })
+    markers.push(destMarker)
+  }
+  
+  // 调整地图视野以包含整个路径
+  if (routePolyline) {
+    mapInstance.setFitView([routePolyline], false, [50, 50, 50, 50])
+  }
+  
+  if (import.meta.env.DEV) {
+    console.log('[MapPanel] 已绘制路径:', { pathLength: path.length, routeData })
+  }
+}
+
+const clearRoute = () => {
+  if (routePolyline) {
+    routePolyline.setMap(null)
+    routePolyline = null
+  }
 }
 </script>
 

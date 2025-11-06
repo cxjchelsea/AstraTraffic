@@ -23,6 +23,7 @@ ToolID = Literal[
     "kb_report",
     "realtime_traffic",
     "realtime_map",
+    "route_planning",
     "none",
 ]
 
@@ -106,6 +107,13 @@ _TOOL_CONFIGS: Dict[str, ToolConfig] = {
         tool_id="realtime_map",
         intent_label="地图查看",
         description="实时地图查看API（查看指定位置的地图、路况、POI等）",
+        kb_name=None,
+        category="realtime",
+    ),
+    "route_planning": ToolConfig(
+        tool_id="route_planning",
+        intent_label="路径规划",
+        description="路径规划API（规划从起点到终点的出行路线，支持驾车、步行、骑行等）",
         kb_name=None,
         category="realtime",
     ),

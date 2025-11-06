@@ -2,6 +2,12 @@
 """
 查询改写适配器（LangChain接口适配）
 职责：将底层查询改写逻辑适配为适配层接口
+
+业务层归属：L2 理解层
+- 语义理解：基于对话历史理解用户意图
+- 查询改写：将不完整的查询改写为完整查询
+- 上下文处理：利用历史对话上下文增强理解
+- 当前模式：被动理解（用户查询触发）
 """
 from typing import List, Tuple
 from modules.generator.query_rewriter import rewrite_query_with_history as _rewrite_query_with_history

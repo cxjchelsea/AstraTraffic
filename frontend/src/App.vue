@@ -70,15 +70,28 @@ const handleSendMessage = async (query) => {
       timestamp: new Date()
     })
     
-    // 如果有地图数据，显示地图
-    if (response.map_data) {
+    // 如果有地图数据或路径数据，显示地图
+    if (response.map_data || response.route_data) {
       if (import.meta.env.DEV) {
         console.log('[App] 收到地图数据:', response.map_data)
+        console.log('[App] 收到路径数据:', response.route_data)
+        console.log('[App] 路径数据详情:', {
+          hasRouteData: !!response.route_data,
+          routeDataKeys: response.route_data ? Object.keys(response.route_data) : [],
+          origin: response.route_data?.origin,
+          destination: response.route_data?.destination,
+          hasPolyline: !!response.route_data?.polyline,
+          polylineLength: response.route_data?.polyline?.length
+        })
       }
-      mapData.value = response.map_data
+      // 合并地图数据和路径数据
+      mapData.value = {
+        ...response.map_data,
+        route_data: response.route_data
+      }
     } else {
       if (import.meta.env.DEV) {
-        console.log('[App] 响应中没有地图数据')
+        console.log('[App] 响应中没有地图数据或路径数据')
         console.log('[App] 完整响应:', response)
       }
     }
